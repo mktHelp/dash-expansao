@@ -3,6 +3,7 @@ import { norm } from "./normalize";
 import type { Lead } from "./types";
 
 const DAY = 86_400_000;
+const COF_HISTORY_DAYS = 7;
 
 const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE });
 /** AAAA-MM-DD no fuso de Brasília */
@@ -40,6 +41,7 @@ export type Stats = {
   qualification: { label: string; count: number }[];
   monthly: { month: string; count: number }[]; // "AAAA-MM"
   states: { uf: string; count: number }[];
+  cofDaily: { day: string; count: number }[]; // "AAAA-MM-DD", últimos dias até hoje
   recent: Lead[];
 };
 
@@ -67,6 +69,7 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
   const qualCount = new Map<string, number>();
   const monthCount = new Map<string, number>();
   const ufCount = new Map<string, number>();
+  const cofDayCount = new Map<string, number>();
 
   for (const l of leads) {
     const k = l.ts != null ? dayKey(l.ts) : null;
@@ -78,6 +81,7 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     if (l.venda) won++;
     if (l.cof) cof++;
     if (l.cof && isToday) cofToday++;
+    if (l.cof && k) inc(cofDayCount, k);
     if (k) inc(monthCount, k.slice(0, 7));
     inc(stageCount, l.etapa);
     inc(qualCount, l.qualificacao.trim() || "Sem qualificação");
@@ -156,6 +160,13 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     }
   }
 
+  // COFs enviadas por dia: os últimos 7 dias, terminando hoje
+  const cofDaily: Stats["cofDaily"] = [];
+  for (let i = COF_HISTORY_DAYS - 1; i >= 0; i--) {
+    const day = dayKey(now - i * DAY);
+    cofDaily.push({ day, count: cofDayCount.get(day) ?? 0 });
+  }
+
   const recent = [...leads]
     .sort((a, b) => (b.ts ?? -Infinity) - (a.ts ?? -Infinity) || b.row - a.row)
     .slice(0, 8);
@@ -184,6 +195,7 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     funnel,
     qualification: [...qualCount.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     monthly,
+    cofDaily,
     states: [...ufCount.entries()].map(([uf, count]) => ({ uf, count })).sort((a, b) => b.count - a.count),
     recent,
   };

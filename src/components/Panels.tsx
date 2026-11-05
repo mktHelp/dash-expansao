@@ -307,7 +307,7 @@ export function Funnel({ funnel, total, qualification }: { funnel: Stats["funnel
 export function Feed({
   leads,
   now,
-  className = "",
+  className = "flex-1",
   cofOnly = false,
 }: {
   leads: Lead[];
@@ -316,7 +316,7 @@ export function Feed({
   cofOnly?: boolean; // tela da campanha: mostra "COF enviada" em vez de "qualificado"
 }) {
   return (
-    <div className={`panel flex-1 p-4 sm:p-5 ${className}`}>
+    <div className={`panel p-4 sm:p-5 ${className}`}>
       <h2 className="mb-3 flex items-center gap-2 font-display text-2xl tracking-wide">
         <Clock size={20} className="text-bf" /> ÚLTIMOS LEADS
       </h2>
@@ -367,6 +367,60 @@ export function Feed({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// ---------------- COFs por dia ----------------
+const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+export function CofHistory({ daily, now, className = "" }: { daily: Stats["cofDaily"]; now: number; className?: string }) {
+  const today = now ? dayKey(now) : "";
+  const max = Math.max(1, ...daily.map((d) => d.count));
+  const total = daily.reduce((s, d) => s + d.count, 0);
+  return (
+    <div className={`panel flex flex-col p-4 sm:p-5 ${className}`}>
+      <h2 className="mb-3 flex items-center justify-between gap-2 font-display text-2xl tracking-wide">
+        <span className="flex items-center gap-2">
+          <BadgeCheck size={20} className="text-bf" /> COFS POR DIA
+        </span>
+        <span className="font-sans text-xs font-semibold normal-case tracking-normal text-zinc-400">
+          <b className="text-bf">{fmt(total)}</b> em {daily.length} dias
+        </span>
+      </h2>
+      <div className="flex min-h-32 flex-1 items-end gap-1.5 sm:gap-2">
+        {daily.map((d) => {
+          const isToday = d.day === today;
+          // meio-dia evita que o fuso puxe a data para o dia anterior
+          const weekday = DIAS[new Date(`${d.day}T12:00:00`).getDay()];
+          const label = isToday ? "hoje" : weekday;
+          return (
+            <div
+              key={d.day}
+              title={`${d.day.slice(8)}/${d.day.slice(5, 7)}: ${d.count} COFs`}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+            >
+              <span className={`mb-0.5 text-xs tabular-nums ${isToday ? "font-bold text-bf" : d.count ? "text-zinc-300" : "text-zinc-600"}`}>
+                {d.count}
+              </span>
+              {d.count === 0 ? (
+                <div className={`w-full rounded-full ${isToday ? "h-[3px] bg-bf/70" : "h-px bg-zinc-700"}`} />
+              ) : (
+                <div
+                  className={`animate-rise w-full rounded-t ${
+                    isToday ? "bg-bf shadow-[0_0_16px_rgba(248,190,25,0.6)]" : "bg-bf/40"
+                  }`}
+                  style={{ height: `${Math.max(4, (d.count / max) * 78)}%` }}
+                />
+              )}
+              <span className={`mt-1 text-[10px] uppercase ${isToday ? "font-bold text-bf" : "text-zinc-500"}`}>{label}</span>
+              <span className="text-[9px] tabular-nums text-zinc-600">
+                {d.day.slice(8)}/{d.day.slice(5, 7)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

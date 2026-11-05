@@ -19,7 +19,7 @@ import type { Lead, LeadsPayload } from "@/lib/types";
 import FitStage, { useStaged } from "./FitStage";
 import { ChampionHero, FinaleOverlay, mvpOf, type Mvp } from "./Finale";
 import Ranking from "./Ranking";
-import { Countdown, DailyGoalToast, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
+import { CofHistory, Countdown, DailyGoalToast, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
 
 // ---- relógio (1s) sem setState em efeito ----
 const subscribeClock = (cb: () => void) => {
@@ -459,8 +459,9 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
                 cofOnly
               />
             </section>
-            <section className={stage ? "col-span-4 min-h-0" : "min-w-0 xl:col-span-4"}>
-              <Feed leads={stats.recent.slice(0, 6)} now={now} className={stage ? "h-full overflow-hidden" : ""} cofOnly />
+            <section className={stage ? "col-span-4 flex min-h-0 flex-col gap-4" : "flex min-w-0 flex-col gap-4 xl:col-span-4"}>
+              <Feed leads={stats.recent.slice(0, 4)} now={now} className={stage ? "shrink-0 overflow-hidden" : ""} cofOnly />
+              <CofHistory daily={stats.cofDaily} now={now} className={stage ? "min-h-0 flex-1" : ""} />
             </section>
           </div>
         </>
