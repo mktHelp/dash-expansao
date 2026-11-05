@@ -21,4 +21,5 @@ export type LeadsPayload = {
   goal: number;
   source: "sheets" | "csv" | "demo";
   fetchedAt: number;
+  build?: string; // id do deploy; quando muda, as telas abertas recarregam
 };

@@ -261,9 +261,9 @@ export function Funnel({ funnel, total, qualification }: { funnel: Stats["funnel
 }
 
 // ---------------- Feed ----------------
-export function Feed({ leads, now }: { leads: Lead[]; now: number }) {
+export function Feed({ leads, now, className = "" }: { leads: Lead[]; now: number; className?: string }) {
   return (
-    <div className="panel flex-1 p-4 sm:p-5">
+    <div className={`panel flex-1 p-4 sm:p-5 ${className}`}>
       <h2 className="mb-3 flex items-center gap-2 font-display text-2xl tracking-wide">
         <Clock size={20} className="text-bf" /> ÚLTIMOS LEADS
       </h2>

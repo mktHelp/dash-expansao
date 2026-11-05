@@ -7,6 +7,7 @@ import { POLL_MS } from "@/lib/config";
 import { norm } from "@/lib/normalize";
 import { computeStats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
+import FitStage, { useStaged } from "./FitStage";
 import Ranking from "./Ranking";
 import { Countdown, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
 
@@ -44,13 +45,27 @@ function playChaChing() {
   }
 }
 
-export type Alert = { lead: Lead; kind: "lead" | "cof" };
+// trava contra recarregar em loop (ex.: durante a troca de versão na Vercel)
+function reloadedRecently(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem("dash-reload") ?? 0);
+    if (Date.now() - last < 120_000) return true;
+    sessionStorage.setItem("dash-reload", String(Date.now()));
+  } catch {
+    /* sem storage: recarrega mesmo assim */
+  }
+  return false;
+}
+
+export type Alert ={ lead: Lead; kind: "lead" | "cof" };
 
 function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const [data, setData] = useState<LeadsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   // ids já anunciados como "novo lead" e como "COF enviada"
   const known = useRef<{ leads: Set<string>; cof: Set<string> } | null>(null);
+  // versão do deploy vista na 1ª leitura; se mudar, recarrega a página sozinho
+  const build = useRef<string | null>(null);
   const onAlertsRef = useRef(onAlerts);
   useEffect(() => {
     onAlertsRef.current = onAlerts;
@@ -67,6 +82,13 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
         if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
         if (!alive) return;
         const payload = json as LeadsPayload;
+        if (payload.build) {
+          if (build.current && build.current !== payload.build && !reloadedRecently()) {
+            window.location.reload();
+            return;
+          }
+          build.current = payload.build;
+        }
         const owned = payload.leads.filter((l) => l.vendedor);
         if (!known.current) {
           // primeira leitura: tudo que já existe conta como "visto"
@@ -137,8 +159,41 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
   const current = queue[0];
   const highlight = current?.lead.vendedor ? norm(current.lead.vendedor) : null;
 
-  return (
-    <main className="mx-auto flex w-full max-w-[1920px] flex-col gap-4 px-4 pb-6 sm:px-6">
+  // TV: tela simples num palco 1920×1080 que se ajusta à tela, sem rolagem
+  const { staged, w, h } = useStaged();
+  const stage = variant === "simple" && staged;
+
+  // mouse parado por 3s: esconde cursor e botões (volta ao mexer)
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    let t = setTimeout(() => setIdle(true), 3000);
+    const wake = () => {
+      setIdle(false);
+      clearTimeout(t);
+      t = setTimeout(() => setIdle(true), 3000);
+    };
+    window.addEventListener("mousemove", wake);
+    window.addEventListener("keydown", wake);
+    window.addEventListener("touchstart", wake);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("mousemove", wake);
+      window.removeEventListener("keydown", wake);
+      window.removeEventListener("touchstart", wake);
+    };
+  }, []);
+  useEffect(() => {
+    document.documentElement.classList.toggle("idle", idle);
+  }, [idle]);
+
+  const content = (
+    <main
+      className={
+        stage
+          ? "flex h-[1080px] w-[1920px] flex-col gap-4 overflow-hidden px-6 pb-6"
+          : "mx-auto flex w-full max-w-[1920px] flex-col gap-4 px-4 pb-6 sm:px-6"
+      }
+    >
       {current && (
         <NewLeadToast key={`${current.kind}-${current.lead.id}`} lead={current.lead} kind={current.kind} onDone={dismissToast} />
       )}
@@ -154,7 +209,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
           className="h-10 w-auto sm:h-12"
         />
 
-        <div className="order-3 w-full text-center lg:order-none lg:w-auto">
+        <div className={stage ? "text-center" : "order-3 w-full text-center lg:order-none lg:w-auto"}>
           <h1 className="font-display text-5xl leading-none tracking-wide sm:text-6xl">
             <span className="glow-text text-bf">BLACK</span> FRIDAY
           </h1>
@@ -168,7 +223,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
             <Countdown now={now} />
             <LiveBadge now={now} fetchedAt={data?.fetchedAt ?? null} error={error} demo={data?.source === "demo"} />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="idle-hide flex flex-col gap-1.5">
             <button
               onClick={() => setSound((s) => !s)}
               title={sound ? "Desativar som" : "Ativar som de novo lead"}
@@ -203,12 +258,17 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       ) : variant === "simple" ? (
         <>
           <GoalHero stats={stats} goal={data!.goal} columns={data!.columns} />
-          <div className="grid items-start gap-4 xl:grid-cols-12">
-            <section className="min-w-0 xl:col-span-8">
-              <Ranking rows={stats.ranking} highlight={highlight} hasColumn={data!.columns.responsavel} />
+          <div className={stage ? "grid min-h-0 flex-1 grid-cols-12 gap-4" : "grid items-start gap-4 xl:grid-cols-12"}>
+            <section className={stage ? "col-span-8 min-h-0" : "min-w-0 xl:col-span-8"}>
+              <Ranking
+                rows={stats.ranking}
+                highlight={highlight}
+                hasColumn={data!.columns.responsavel}
+                className={stage ? "h-full overflow-hidden" : ""}
+              />
             </section>
-            <section className="min-w-0 xl:col-span-4">
-              <Feed leads={stats.recent.slice(0, 6)} now={now} />
+            <section className={stage ? "col-span-4 min-h-0" : "min-w-0 xl:col-span-4"}>
+              <Feed leads={stats.recent.slice(0, 6)} now={now} className={stage ? "h-full overflow-hidden" : ""} />
             </section>
           </div>
         </>
@@ -231,5 +291,13 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
         </>
       )}
     </main>
+  );
+
+  return stage ? (
+    <FitStage w={w} h={h}>
+      {content}
+    </FitStage>
+  ) : (
+    content
   );
 }

@@ -6,7 +6,10 @@ export async function GET() {
 
   try {
     const payload = await getLeadsPayload();
-    return Response.json(payload, {
+    // id do deploy atual (variáveis de sistema da Vercel): quando sobe versão
+    // nova, o painel percebe a diferença e recarrega sozinho
+    const build = process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "local";
+    return Response.json({ ...payload, build }, {
       headers: {
         // navegador sempre busca de novo; a CDN da Vercel segura 10s para
         // proteger a cota da API do Google quando muitas telas estão abertas

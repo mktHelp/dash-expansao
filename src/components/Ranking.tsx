@@ -72,14 +72,24 @@ function Podium({ row, idx, highlight, gap }: { row: RankRow; idx: number; highl
   );
 }
 
-export default function Ranking({ rows, highlight, hasColumn }: { rows: RankRow[]; highlight: string | null; hasColumn: boolean }) {
+export default function Ranking({
+  rows,
+  highlight,
+  hasColumn,
+  className = "",
+}: {
+  rows: RankRow[];
+  highlight: string | null;
+  hasColumn: boolean;
+  className?: string;
+}) {
   const leader = rows[0];
   const top = rows.slice(0, 3);
   const rest = rows.slice(3);
   const max = leader?.total || 1;
 
   return (
-    <div className="panel p-4 sm:p-5">
+    <div className={`panel p-4 sm:p-5 ${className}`}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-display text-2xl tracking-wide sm:text-3xl">
           <Trophy className="text-bf" size={26} /> RANKING DE VENDEDORES
