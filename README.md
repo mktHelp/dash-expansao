@@ -9,6 +9,10 @@ Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba
 
 Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o candidato aparece como "Maria S.".
 
+### Duas telas
+- **`/` — campanha (direta):** meta de COFs enviadas em destaque, ranking de vendedores e últimos leads. É a tela da TV durante a Black.
+- **`/completo` — visão completa:** tudo acima + qualificados, etapas no CRM, leads por mês e top estados. Para usar depois da Black.
+
 ---
 
 ## 1. A planilha

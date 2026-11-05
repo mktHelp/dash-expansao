@@ -142,6 +142,70 @@ export function Kpis({ stats, goal, columns }: { stats: Stats; goal: number; col
   );
 }
 
+// ---------------- Meta em destaque (visão simples) ----------------
+export function GoalHero({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
+  const pct = Math.min(100, Math.round((stats.cof / goal) * 100));
+  const left = Math.max(0, goal - stats.cof);
+  const marks = [0.25, 0.5, 0.75];
+  return (
+    <div className="panel relative overflow-hidden border-bf/50 p-5 sm:p-7">
+      <div className="absolute inset-x-0 top-0 h-1 bg-bf" />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-zinc-400 sm:text-sm">
+            <Target size={16} className="text-bf" /> Meta da Black · COFs enviadas
+          </p>
+          <p className="mt-1 flex items-baseline gap-3 font-display leading-none">
+            <span className="glow-text text-8xl tabular-nums text-bf sm:text-[9rem]">{fmt(stats.cof)}</span>
+            <span className="text-4xl text-zinc-500 sm:text-6xl">/ {fmt(goal)}</span>
+          </p>
+        </div>
+        <p className="font-display text-6xl leading-none tabular-nums sm:text-8xl">{pct}%</p>
+      </div>
+
+      <div className="relative mt-5">
+        <div className="h-7 overflow-hidden rounded-full bg-zinc-800 sm:h-9">
+          {/* wrapper separado: a barra cresce (animate-bar) e as listras correm (hazard) */}
+          <div className="animate-bar h-full" style={{ width: `${pct}%` }}>
+            <div className="hazard h-full rounded-full shadow-[0_0_24px_rgba(248,190,25,0.5)]" />
+          </div>
+        </div>
+        {marks.map((m) => (
+          <div key={m} className="absolute top-0 h-full" style={{ left: `${m * 100}%` }}>
+            <div className="h-full w-px bg-zinc-950/60" />
+            <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 text-[11px] tabular-nums text-zinc-500">
+              {fmt(Math.round(goal * m))}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-400 sm:text-base">
+        {!columns.cofEnviada ? (
+          <span className="text-amber-400">
+            <TriangleAlert size={14} className="mr-1 inline" />
+            crie a coluna &quot;COF Enviada&quot; (Sim/Não) na planilha
+          </span>
+        ) : stats.cof >= goal ? (
+          <span className="font-display text-2xl text-bf">META BATIDA! 🎉</span>
+        ) : (
+          <span>
+            faltam <b className="font-display text-2xl text-bf">{fmt(left)}</b> COFs
+          </span>
+        )}
+        <span>
+          <Flame size={14} className="mr-1 inline text-orange-400" />
+          hoje <b className="text-white">{fmt(stats.today)}</b> {stats.today === 1 ? "lead" : "leads"}
+        </span>
+        <span>
+          <Zap size={14} className="mr-1 inline text-bf" />
+          <b className="text-white">{fmt(stats.total)}</b> leads na planilha
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ---------------- Funil ----------------
 export function Funnel({ funnel, total, qualification }: { funnel: Stats["funnel"]; total: number; qualification: Stats["qualification"] }) {
   const max = Math.max(1, ...funnel.map((f) => f.count));

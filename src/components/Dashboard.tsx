@@ -8,7 +8,7 @@ import { norm } from "@/lib/normalize";
 import { computeStats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
 import Ranking from "./Ranking";
-import { Countdown, Feed, Funnel, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
+import { Countdown, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
 
 // ---- relógio (1s) sem setState em efeito ----
 const subscribeClock = (cb: () => void) => {
@@ -108,7 +108,8 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
   return { data, error };
 }
 
-export default function Dashboard() {
+/** variant "simple" = campanha (direto ao ponto); "full" = visão completa (/completo). */
+export default function Dashboard({ variant = "simple" }: { variant?: "simple" | "full" }) {
   const now = useClock();
   const [queue, setQueue] = useState<Alert[]>([]);
   const [sound, setSound] = useState(false);
@@ -199,6 +200,18 @@ export default function Dashboard() {
             <p className="font-display animate-pulse text-3xl tracking-wide text-bf">CARREGANDO…</p>
           )}
         </div>
+      ) : variant === "simple" ? (
+        <>
+          <GoalHero stats={stats} goal={data!.goal} columns={data!.columns} />
+          <div className="grid items-start gap-4 xl:grid-cols-12">
+            <section className="min-w-0 xl:col-span-8">
+              <Ranking rows={stats.ranking} highlight={highlight} hasColumn={data!.columns.responsavel} />
+            </section>
+            <section className="min-w-0 xl:col-span-4">
+              <Feed leads={stats.recent.slice(0, 6)} now={now} />
+            </section>
+          </div>
+        </>
       ) : (
         <>
           <Kpis stats={stats} goal={data!.goal} columns={data!.columns} />
