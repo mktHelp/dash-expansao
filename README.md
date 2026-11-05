@@ -1,11 +1,11 @@
 # Black Friday Expansão — Painel ao vivo de leads em COF
 
-Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba *Qualificação COF 2026*) direto do Google Sheets — sem banco de dados — e mostra em tempo real, até **30/11**:
+Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba *Qualificação COF 2026*) direto do Google Sheets — sem banco de dados — e mostra em tempo real, até **15/11**:
 
 - 🏆 **Ranking de vendedores** (coluna *Responsável*): pódio, "faltam X para passar Fulano", ▲▼ posições nas últimas 24h, selo *on fire* com 3+ leads no dia, qualificados e vendas de cada um
 - 🔥 **Alerta de NOVO LEAD** na tela quando alguém adiciona uma linha com Responsável (som opcional)
 - **Meta de 200 COFs enviadas** (coluna *COF Enviada* = Sim) e KPIs: total de leads da planilha, hoje vs ontem, qualificados, vendas, etapas no CRM, leads por mês (novembro marcado como Black Friday), top UFs e últimos leads
-- Contagem regressiva até 30/11
+- Contagem regressiva até 15/11
 
 Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o candidato aparece como "Maria S.".
 
@@ -46,6 +46,8 @@ O resumo anda duas colunas para a direita e as fórmulas dele se ajustam sozinha
 **Regras**
 - **Tudo conta:** o painel considera **todas as linhas da planilha**, de qualquer data (desde maio), não só novembro.
 - **Meta (200):** linhas com **COF Enviada = Sim**. "Não" ou vazio não contam.
+- **Meta do dia:** (200 − COFs enviadas até ontem) ÷ dias que faltam até 15/11, contando hoje, arredondado para cima. "Enviadas hoje" = COF Enviada = Sim **com Data de envio = hoje**. Quando bate, toca uma buzina e aparece "META DO DIA BATIDA!".
+- **Empate:** quem tem o mesmo nº de leads divide a posição (1º, 1º, 3º) e aparece com o selo EMPATE.
 - **Ranking:** leads com **Responsável** preenchido. Desempate: mais COFs enviadas → mais vendas → mais qualificados → quem chegou primeiro.
 - Linha sem Responsável conta no total, mas não pontua para ninguém (o painel avisa quantas estão assim).
 - **Alertas na tela:** "NOVO LEAD NA COF!" quando a linha ganha um Responsável; "+1 NA META! COF ENVIADA" quando a COF Enviada vira Sim.

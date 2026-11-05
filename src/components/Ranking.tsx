@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Crown, Flame, Sparkles, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, Crown, Equal, Flame, Sparkles, Trophy } from "lucide-react";
 import { initials, type RankRow } from "@/lib/stats";
 
 const MEDAL = [
@@ -27,6 +27,15 @@ function Delta({ delta }: { delta: number | null }) {
   );
 }
 
+function Tie({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="inline-flex items-center gap-0.5 rounded bg-sky-400/20 px-1.5 py-0.5 text-[10px] font-black uppercase text-sky-200 ring-1 ring-sky-300/40">
+      <Equal size={11} /> empate
+    </span>
+  );
+}
+
 function OnFire({ today }: { today: number }) {
   if (today < 3) return null;
   return (
@@ -41,18 +50,21 @@ function Podium({
   idx,
   highlight,
   gap,
+  tiedWith,
   cofOnly,
 }: {
   row: RankRow;
   idx: number;
   highlight: boolean;
   gap: number | null;
+  tiedWith: string | null; // nome de quem está empatado com ele (se houver)
   cofOnly: boolean;
 }) {
-  const m = MEDAL[idx];
+  // cor/altura pela posição: empatados ficam iguais (ex.: dois 1º lugares)
+  const m = MEDAL[Math.min(row.position, 3) - 1];
   return (
     <div className={`flex flex-1 flex-col items-center ${idx === 0 ? "order-2" : idx === 1 ? "order-1" : "order-3"}`}>
-      {idx === 0 && <Crown className="mb-1 text-bf drop-shadow-[0_0_12px_rgba(248,190,25,0.8)]" size={34} />}
+      {row.position === 1 && <Crown className="mb-1 text-bf drop-shadow-[0_0_12px_rgba(248,190,25,0.8)]" size={34} />}
       <div
         className={`grid size-16 place-items-center rounded-full bg-zinc-900 font-display text-2xl ring-4 sm:size-20 sm:text-3xl ${m.ring} ${highlight ? "animate-flash" : ""}`}
       >
@@ -60,24 +72,31 @@ function Podium({
       </div>
       <p className="mt-2 max-w-full truncate text-center text-sm font-bold sm:text-base">{row.name}</p>
       <div className="mt-0.5 flex items-center gap-1.5">
+        <Tie show={!!tiedWith} />
         <Delta delta={row.delta} />
         <OnFire today={row.today} />
       </div>
       <div
         className={`mt-2 flex w-full flex-col items-center justify-start rounded-t-xl pt-3 pb-2 ${m.height} ${
-          idx === 0 ? "bg-gradient-to-b from-bf/30 to-bf/5" : "bg-gradient-to-b from-zinc-700/40 to-zinc-800/10"
+          row.position === 1 ? "bg-gradient-to-b from-bf/30 to-bf/5" : "bg-gradient-to-b from-zinc-700/40 to-zinc-800/10"
         }`}
       >
         <span className={`font-display text-5xl leading-none sm:text-6xl ${m.label}`}>{row.total}</span>
         <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">leads</span>
-        <span className={`mt-2 rounded-full px-2.5 py-0.5 text-base font-black ${m.bg}`}>{idx + 1}º</span>
+        <span className={`mt-2 rounded-full px-2.5 py-0.5 text-base font-black ${m.bg}`}>{row.position}º</span>
         <span className="mt-1.5 text-[11px] text-zinc-500">
           +{row.today} hoje · <b className="text-bf">{row.cof} COF</b> {cofOnly ? "" : ` · ${row.qualified} qualif.`}{row.won > 0 ? ` · ${row.won} venda${row.won > 1 ? "s" : ""}` : ""}
         </span>
-        {gap != null && (
-          <span className="mt-0.5 px-1 text-center text-[11px] text-zinc-400">
-            faltam <b className="text-bf">{gap}</b> p/ o {idx}º
+        {tiedWith ? (
+          <span className="mt-0.5 px-1 text-center text-[11px] font-semibold text-sky-200">
+            empatado com {tiedWith.split(" ")[0]}
           </span>
+        ) : (
+          gap != null && (
+            <span className="mt-0.5 px-1 text-center text-[11px] text-zinc-400">
+              faltam <b className="text-bf">{gap}</b> p/ o {row.position - 1}º
+            </span>
+          )
         )}
       </div>
     </div>
@@ -101,6 +120,11 @@ export default function Ranking({
   const top = rows.slice(0, 3);
   const rest = rows.slice(3);
   const max = leader?.total || 1;
+  // primeiro nome de quem tem o mesmo nº de leads (para mostrar o empate)
+  const tieOf = (i: number) => {
+    const other = rows.find((o, j) => j !== i && o.total === rows[i].total);
+    return other ? other.name : null;
+  };
 
   return (
     <div className={`panel p-4 sm:p-5 ${className}`}>
@@ -143,6 +167,7 @@ export default function Ranking({
                 idx={i}
                 highlight={highlight === r.key}
                 gap={i > 0 ? rows[i - 1].total - r.total + 1 : null}
+                tiedWith={tieOf(i)}
                 cofOnly={cofOnly}
               />
             ))}
@@ -151,8 +176,9 @@ export default function Ranking({
           {rest.length > 0 && (
             <ol className="mt-4 flex flex-col gap-1.5">
               {rest.map((r, i) => {
-                const above = rows[r.position - 2];
+                const above = rows[i + 2];
                 const gap = above.total - r.total + 1;
+                const tiedWith = tieOf(i + 3);
                 return (
                   <li
                     key={r.key}
@@ -160,13 +186,14 @@ export default function Ranking({
                       highlight === r.key ? "animate-flash" : ""
                     }`}
                   >
-                    <span className="text-center text-lg font-black text-zinc-500">{i + 4}º</span>
+                    <span className="text-center text-lg font-black text-zinc-500">{r.position}º</span>
                     <span className="grid size-9 place-items-center rounded-full bg-zinc-800 text-xs font-bold">
                       {initials(r.name)}
                     </span>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="truncate font-semibold">{r.name}</span>
+                        <Tie show={!!tiedWith} />
                         <Delta delta={r.delta} />
                         <OnFire today={r.today} />
                       </div>
@@ -177,7 +204,14 @@ export default function Ranking({
                         />
                       </div>
                       <p className="mt-1 text-[11px] text-zinc-500">
-                        faltam <b className="text-bf">{gap}</b> para passar {above.name.split(" ")[0]} · +{r.today} hoje · <b className="text-zinc-300">{r.cof} COF</b>
+                        {tiedWith ? (
+                          <b className="text-sky-200">empatado com {tiedWith.split(" ")[0]}</b>
+                        ) : (
+                          <>
+                            faltam <b className="text-bf">{gap}</b> para passar {above.name.split(" ")[0]}
+                          </>
+                        )}{" "}
+                        · +{r.today} hoje · <b className="text-zinc-300">{r.cof} COF</b>
                         {cofOnly ? "" : ` · ${r.qualified} qualif.`}
                       </p>
                     </div>

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BadgeCheck, CalendarDays, Clock, Filter, Flame, MapPin, Radio, Target, TrendingDown, TrendingUp, TriangleAlert, Users, Zap } from "lucide-react";
+import { BadgeCheck, CalendarDays, Megaphone, Clock, Filter, Flame, MapPin, Radio, Target, TrendingDown, TrendingUp, TriangleAlert, Users, Zap } from "lucide-react";
 import { BLACK_FRIDAY_DAY, CAMPAIGN_END, LOST_STAGE, STAGES } from "@/lib/config";
 import { dayKey, isQualified, timeAgo, type Stats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
@@ -26,7 +26,7 @@ export function Countdown({ now }: { now: number }) {
       <span className="hidden text-right text-[10px] font-semibold uppercase leading-tight tracking-widest text-zinc-400 sm:block">
         termina
         <br />
-        30/11
+        {dayKey(CAMPAIGN_END).slice(8)}/{dayKey(CAMPAIGN_END).slice(5, 7)}
       </span>
       {parts.map((p, i) => (
         <div key={labels[i]} className="flex w-12 flex-col items-center rounded-lg border border-bf/30 bg-bf/10 py-1 sm:w-14">
@@ -142,6 +142,48 @@ export function Kpis({ stats, goal, columns }: { stats: Stats; goal: number; col
   );
 }
 
+// ---------------- Meta do dia ----------------
+export function DailyGoal({ stats }: { stats: Stats }) {
+  const { cofToday, dailyGoal, daysLeft } = stats;
+  const met = dailyGoal > 0 && cofToday >= dailyGoal;
+  const pct = dailyGoal > 0 ? Math.min(100, Math.round((cofToday / dailyGoal) * 100)) : 100;
+  return (
+    <div
+      className={`w-full rounded-2xl border p-4 sm:w-[26rem] ${
+        met ? "border-emerald-400/70 bg-emerald-500/10" : "border-bf/40 bg-bf/5"
+      }`}
+    >
+      <p className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-zinc-400">
+        <span className="flex items-center gap-1.5">
+          <CalendarDays size={14} className={met ? "text-emerald-400" : "text-bf"} /> Meta de hoje
+        </span>
+        <span className="tracking-normal normal-case">
+          {daysLeft === 1 ? "último dia!" : `${daysLeft} dias restantes`}
+        </span>
+      </p>
+      <p className="mt-1 flex items-baseline gap-2 font-display leading-none">
+        <span className={`text-7xl tabular-nums ${met ? "text-emerald-400" : "text-bf"}`}>{fmt(cofToday)}</span>
+        <span className="text-4xl text-zinc-500">/ {fmt(dailyGoal)}</span>
+      </p>
+      <div className="mt-3 h-3 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className={`animate-bar h-full rounded-full ${met ? "bg-emerald-400" : "bg-bf"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-2 text-sm text-zinc-400">
+        {met ? (
+          <b className="font-display text-xl tracking-wide text-emerald-400">META DO DIA BATIDA! 📣</b>
+        ) : (
+          <>
+            faltam <b className="font-display text-xl text-bf">{fmt(dailyGoal - cofToday)}</b> COFs hoje
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
 // ---------------- Meta em destaque (visão simples) ----------------
 export function GoalHero({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
   const pct = Math.min(100, Math.round((stats.cof / goal) * 100));
@@ -158,9 +200,10 @@ export function GoalHero({ stats, goal, columns }: { stats: Stats; goal: number;
           <p className="mt-1 flex items-baseline gap-3 font-display leading-none">
             <span className="glow-text text-8xl tabular-nums text-bf sm:text-[9rem]">{fmt(stats.cof)}</span>
             <span className="text-4xl text-zinc-500 sm:text-6xl">/ {fmt(goal)}</span>
+            <span className="ml-2 text-4xl tabular-nums text-white sm:text-6xl">{pct}%</span>
           </p>
         </div>
-        <p className="font-display text-6xl leading-none tabular-nums sm:text-8xl">{pct}%</p>
+        {stats.daysLeft > 0 && <DailyGoal stats={stats} />}
       </div>
 
       <div className="relative mt-5">
@@ -443,6 +486,29 @@ export function NewLeadToast({ lead, kind, onDone }: { lead: Lead; kind: "lead" 
                   {lead.uf && `/${lead.uf}`}
                 </span>
               )}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Meta do dia batida ----------------
+export function DailyGoalToast({ cofToday, dailyGoal, onDone }: { cofToday: number; dailyGoal: number; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 8000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className="animate-toast fixed left-1/2 top-4 z-50 w-[min(92vw,760px)]" style={{ animationDuration: "8s" }}>
+      <div className="hazard rounded-2xl p-1.5 shadow-[0_0_90px_rgba(52,211,153,0.6)]">
+        <div className="flex items-center gap-5 rounded-xl bg-emerald-500 px-6 py-5 text-ink">
+          <Megaphone className="shrink-0" size={52} />
+          <div className="min-w-0">
+            <p className="font-display text-4xl leading-tight tracking-wide">META DO DIA BATIDA!</p>
+            <p className="text-base font-semibold">
+              {fmt(cofToday)} de {fmt(dailyGoal)} COFs enviadas hoje — bora passar!
             </p>
           </div>
         </div>

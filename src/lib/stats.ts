@@ -31,6 +31,9 @@ export type Stats = {
   qualified: number;
   won: number;
   cof: number; // linhas com COF Enviada = Sim (conta para a meta)
+  cofToday: number; // COF Enviada = Sim com Data de envio = hoje
+  daysLeft: number; // dias até o fim da campanha, contando hoje (0 = acabou)
+  dailyGoal: number; // (meta - COFs até ontem) / dias restantes, arredondado p/ cima
   unassigned: number; // leads sem Responsável
   ranking: RankRow[];
   funnel: { stage: string; count: number }[];
@@ -42,7 +45,7 @@ export type Stats = {
 
 const inc = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
 
-export function computeStats(all: Lead[], now: number): Stats {
+export function computeStats(all: Lead[], now: number, goal = 0): Stats {
   // todo o período da planilha (não só a campanha)
   const leads = all;
   const todayKey = dayKey(now);
@@ -57,6 +60,7 @@ export function computeStats(all: Lead[], now: number): Stats {
   let qualified = 0;
   let won = 0;
   let cof = 0;
+  let cofToday = 0;
   let unassigned = 0;
   const sellers = new Map<string, Omit<RankRow, "position" | "delta"> & { before: number }>();
   const stageCount = new Map<string, number>();
@@ -73,6 +77,7 @@ export function computeStats(all: Lead[], now: number): Stats {
     if (q) qualified++;
     if (l.venda) won++;
     if (l.cof) cof++;
+    if (l.cof && isToday) cofToday++;
     if (k) inc(monthCount, k.slice(0, 7));
     inc(stageCount, l.etapa);
     inc(qualCount, l.qualificacao.trim() || "Sem qualificação");
@@ -106,7 +111,13 @@ export function computeStats(all: Lead[], now: number): Stats {
     .sort((a, b) => b.before - a.before)
     .forEach((s, i) => prevPos.set(s.key, i + 1));
 
-  const ranking: RankRow[] = [...sellers.values()].sort(byScore).map((s, i) => {
+  // posição "olímpica": quem tem o mesmo nº de leads divide a posição (1º, 1º, 3º)
+  const sorted = [...sellers.values()].sort(byScore);
+  const positions: number[] = [];
+  sorted.forEach((s, i) => {
+    positions.push(i > 0 && s.total === sorted[i - 1].total ? positions[i - 1] : i + 1);
+  });
+  const ranking: RankRow[] = sorted.map((s, i) => {
     const prev = prevPos.get(s.key);
     return {
       key: s.key,
@@ -117,8 +128,8 @@ export function computeStats(all: Lead[], now: number): Stats {
       won: s.won,
       cof: s.cof,
       lastTs: s.lastTs,
-      position: i + 1,
-      delta: !hasHistory ? 0 : prev == null ? null : prev - (i + 1),
+      position: positions[i],
+      delta: !hasHistory ? 0 : prev == null ? null : prev - positions[i],
     };
   });
 
@@ -149,6 +160,14 @@ export function computeStats(all: Lead[], now: number): Stats {
     .sort((a, b) => (b.ts ?? -Infinity) - (a.ts ?? -Infinity) || b.row - a.row)
     .slice(0, 8);
 
+  // meta diária: o que falta da meta (descontando o que já foi enviado até
+  // ontem) dividido pelos dias que restam, contando hoje
+  const lastDay = dayKey(CAMPAIGN_END);
+  const daysLeft =
+    todayKey > lastDay ? 0 : Math.round((Date.parse(lastDay) - Date.parse(todayKey)) / DAY) + 1;
+  const remainingAtDayStart = Math.max(0, goal - (cof - cofToday));
+  const dailyGoal = daysLeft > 0 ? Math.ceil(remainingAtDayStart / daysLeft) : 0;
+
   return {
     total: leads.length,
     today,
@@ -157,6 +176,9 @@ export function computeStats(all: Lead[], now: number): Stats {
     qualified,
     won,
     cof,
+    cofToday,
+    daysLeft,
+    dailyGoal,
     unassigned,
     ranking,
     funnel,

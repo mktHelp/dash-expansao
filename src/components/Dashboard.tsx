@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Maximize, Volume2, VolumeX } from "lucide-react";
 import { POLL_MS } from "@/lib/config";
 import { norm } from "@/lib/normalize";
-import { computeStats } from "@/lib/stats";
+import { computeStats, dayKey } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
 import FitStage, { useStaged } from "./FitStage";
 import Ranking from "./Ranking";
-import { Countdown, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
+import { Countdown, DailyGoalToast, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
 
 // ---- relógio (1s) sem setState em efeito ----
 const subscribeClock = (cb: () => void) => {
@@ -55,6 +55,38 @@ function playChaChing() {
   });
 }
 
+// Buzina (estilo "air horn") sintetizada: acorde de serrotes, dois toques.
+function playHorn() {
+  const ctx = getAudio();
+  if (!ctx) return;
+  const out = ctx.createGain();
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2400;
+  lp.connect(out).connect(ctx.destination);
+  const t0 = ctx.currentTime;
+  const blasts: [number, number][] = [
+    [0, 0.45],
+    [0.6, 1.5],
+  ];
+  out.gain.setValueAtTime(0.0001, t0);
+  for (const [a, b] of blasts) {
+    out.gain.setValueAtTime(0.0001, t0 + a);
+    out.gain.exponentialRampToValueAtTime(0.35, t0 + a + 0.03);
+    out.gain.setValueAtTime(0.35, t0 + b - 0.08);
+    out.gain.exponentialRampToValueAtTime(0.0001, t0 + b);
+  }
+  [233, 294, 349, 466].forEach((freq) => {
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(freq * 0.97, t0);
+    o.frequency.linearRampToValueAtTime(freq, t0 + 0.08);
+    o.connect(lp);
+    o.start(t0);
+    o.stop(t0 + 1.6);
+  });
+}
+
 // trava contra recarregar em loop (ex.: durante a troca de versão na Vercel)
 function reloadedRecently(): boolean {
   try {
@@ -67,7 +99,9 @@ function reloadedRecently(): boolean {
   return false;
 }
 
-export type Alert ={ lead: Lead; kind: "lead" | "cof" };
+export type Alert =
+  | { kind: "lead" | "cof"; lead: Lead }
+  | { kind: "daily"; cofToday: number; dailyGoal: number; day: string };
 
 function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const [data, setData] = useState<LeadsPayload | null>(null);
@@ -76,6 +110,8 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const known = useRef<{ leads: Set<string>; cof: Set<string> } | null>(null);
   // versão do deploy vista na 1ª leitura; se mudar, recarrega a página sozinho
   const build = useRef<string | null>(null);
+  // dia em que a meta diária já estava batida (para tocar a buzina só na virada)
+  const dailyMet = useRef<string | null | undefined>(undefined);
   const onAlertsRef = useRef(onAlerts);
   useEffect(() => {
     onAlertsRef.current = onAlerts;
@@ -100,6 +136,17 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
           build.current = payload.build;
         }
         const owned = payload.leads.filter((l) => l.vendedor);
+
+        // meta diária: buzina só quando passa de "não batida" para "batida"
+        const now = Date.now();
+        const st = computeStats(payload.leads, now, payload.goal);
+        const metDay = st.dailyGoal > 0 && st.cofToday >= st.dailyGoal ? dayKey(now) : null;
+        const dailyAlert: Alert[] =
+          dailyMet.current !== undefined && metDay && dailyMet.current !== metDay
+            ? [{ kind: "daily", cofToday: st.cofToday, dailyGoal: st.dailyGoal, day: metDay }]
+            : [];
+        dailyMet.current = metDay;
+
         if (!known.current) {
           // primeira leitura: tudo que já existe conta como "visto"
           known.current = {
@@ -119,7 +166,8 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
             else if (isNew) alerts.push({ lead: l, kind: "lead" });
           }
           // >10 de uma vez = provavelmente importação em massa; não spamma alertas
-          if (alerts.length > 0 && alerts.length <= 10) onAlertsRef.current(alerts);
+          if (alerts.length > 10) alerts.length = 0;
+          if (alerts.length + dailyAlert.length > 0) onAlertsRef.current([...dailyAlert, ...alerts]);
         }
         setData(payload);
         setError(null);
@@ -163,7 +211,10 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
 
   const onAlerts = useCallback((alerts: Alert[]) => {
     setQueue((q) => [...q, ...alerts].slice(-6));
-    if (soundRef.current) playChaChing();
+    if (soundRef.current) {
+      if (alerts.some((a) => a.kind === "daily")) playHorn();
+      else playChaChing();
+    }
   }, []);
 
   const dismissToast = useCallback(() => setQueue((q) => q.slice(1)), []);
@@ -173,12 +224,12 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
   // recalcula estatísticas a cada minuto (ou quando chegam dados)
   const minute = Math.floor(now / 60_000) * 60_000;
   const stats = useMemo(
-    () => (data && minute ? computeStats(data.leads, minute) : null),
+    () => (data && minute ? computeStats(data.leads, minute, data.goal) : null),
     [data, minute],
   );
 
   const current = queue[0];
-  const highlight = current?.lead.vendedor ? norm(current.lead.vendedor) : null;
+  const highlight = current && current.kind !== "daily" && current.lead.vendedor ? norm(current.lead.vendedor) : null;
 
   // TV: tela simples num palco 1920×1080 que se ajusta à tela, sem rolagem
   const { staged, w, h } = useStaged();
@@ -216,7 +267,11 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       }
     >
       {current && (
-        <NewLeadToast key={`${current.kind}-${current.lead.id}`} lead={current.lead} kind={current.kind} onDone={dismissToast} />
+        current.kind === "daily" ? (
+          <DailyGoalToast key={`daily-${current.day}`} cofToday={current.cofToday} dailyGoal={current.dailyGoal} onDone={dismissToast} />
+        ) : (
+          <NewLeadToast key={`${current.kind}-${current.lead.id}`} lead={current.lead} kind={current.kind} onDone={dismissToast} />
+        )
       )}
 
       {/* ---------- topo ---------- */}

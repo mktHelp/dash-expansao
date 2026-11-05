@@ -8,7 +8,7 @@ export const CAMPAIGN_START = new Date(
 ).getTime();
 
 export const CAMPAIGN_END = new Date(
-  process.env.NEXT_PUBLIC_CAMPAIGN_END ?? "2026-11-30T23:59:59-03:00",
+  process.env.NEXT_PUBLIC_CAMPAIGN_END ?? "2026-11-15T23:59:59-03:00",
 ).getTime();
 
 // Dia da Black Friday (destacado no gráfico diário) — formato AAAA-MM-DD.
