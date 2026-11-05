@@ -5,9 +5,19 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Maximize, Volume2, VolumeX } from "lucide-react";
 import { POLL_MS } from "@/lib/config";
 import { norm } from "@/lib/normalize";
+import {
+  confettiBurst,
+  fireworksShow,
+  flushPendingVictory,
+  playCelebration,
+  playVictory,
+  preloadVictory,
+  startAmbientSparkles,
+} from "@/lib/celebrate";
 import { computeStats, dayKey } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
 import FitStage, { useStaged } from "./FitStage";
+import { ChampionHero, FinaleOverlay, mvpOf, type Mvp } from "./Finale";
 import Ranking from "./Ranking";
 import { Countdown, DailyGoalToast, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
 
@@ -55,37 +65,21 @@ function playChaChing() {
   });
 }
 
-// Buzina (estilo "air horn") sintetizada: acorde de serrotes, dois toques.
-function playHorn() {
+const noopSubscribe = () => () => {};
+const readSimParam = () => {
+  const v = new URLSearchParams(window.location.search).get("simular");
+  return v && v !== "false" && v !== "0" ? v.toLowerCase() : null;
+};
+
+// estado do áudio ("running" = liberado). Usado para avisar quando o
+// navegador bloqueou o som até alguém clicar na página.
+const subscribeAudio = (cb: () => void) => {
   const ctx = getAudio();
-  if (!ctx) return;
-  const out = ctx.createGain();
-  const lp = ctx.createBiquadFilter();
-  lp.type = "lowpass";
-  lp.frequency.value = 2400;
-  lp.connect(out).connect(ctx.destination);
-  const t0 = ctx.currentTime;
-  const blasts: [number, number][] = [
-    [0, 0.45],
-    [0.6, 1.5],
-  ];
-  out.gain.setValueAtTime(0.0001, t0);
-  for (const [a, b] of blasts) {
-    out.gain.setValueAtTime(0.0001, t0 + a);
-    out.gain.exponentialRampToValueAtTime(0.35, t0 + a + 0.03);
-    out.gain.setValueAtTime(0.35, t0 + b - 0.08);
-    out.gain.exponentialRampToValueAtTime(0.0001, t0 + b);
-  }
-  [233, 294, 349, 466].forEach((freq) => {
-    const o = ctx.createOscillator();
-    o.type = "sawtooth";
-    o.frequency.setValueAtTime(freq * 0.97, t0);
-    o.frequency.linearRampToValueAtTime(freq, t0 + 0.08);
-    o.connect(lp);
-    o.start(t0);
-    o.stop(t0 + 1.6);
-  });
-}
+  ctx?.addEventListener("statechange", cb);
+  return () => ctx?.removeEventListener("statechange", cb);
+};
+const readAudioState = () => audioCtx?.state ?? "suspended";
+const serverAudioState = () => "running";
 
 // trava contra recarregar em loop (ex.: durante a troca de versão na Vercel)
 function reloadedRecently(): boolean {
@@ -101,7 +95,11 @@ function reloadedRecently(): boolean {
 
 export type Alert =
   | { kind: "lead" | "cof"; lead: Lead }
-  | { kind: "daily"; cofToday: number; dailyGoal: number; day: string };
+  | { kind: "daily"; cofToday: number; dailyGoal: number; day: string }
+  | { kind: "goal"; cof: number; goal: number; mvp: Mvp };
+// alertas que viram aviso no topo (a meta de 200 tem a tela cheia própria)
+type ToastAlert = Exclude<Alert, { kind: "goal" }>;
+const isToast = (a: Alert): a is ToastAlert => a.kind !== "goal";
 
 function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const [data, setData] = useState<LeadsPayload | null>(null);
@@ -112,6 +110,8 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const build = useRef<string | null>(null);
   // dia em que a meta diária já estava batida (para tocar a buzina só na virada)
   const dailyMet = useRef<string | null | undefined>(undefined);
+  // meta de 200 já estava batida? (grande final só na virada)
+  const goalMet = useRef<boolean | undefined>(undefined);
   const onAlertsRef = useRef(onAlerts);
   useEffect(() => {
     onAlertsRef.current = onAlerts;
@@ -147,6 +147,16 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
             : [];
         dailyMet.current = metDay;
 
+        // meta da Black (200): grande final quando passa de "não batida" para "batida"
+        const reached = payload.goal > 0 && st.cof >= payload.goal;
+        const goalAlert: Alert[] =
+          goalMet.current === false && reached
+            ? [{ kind: "goal", cof: st.cof, goal: payload.goal, mvp: mvpOf(st.ranking) }]
+            : [];
+        goalMet.current = reached;
+        // na mesma virada, a grande final substitui a comemoração do dia
+        const bigAlerts = goalAlert.length ? goalAlert : dailyAlert;
+
         if (!known.current) {
           // primeira leitura: tudo que já existe conta como "visto"
           known.current = {
@@ -167,7 +177,7 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
           }
           // >10 de uma vez = provavelmente importação em massa; não spamma alertas
           if (alerts.length > 10) alerts.length = 0;
-          if (alerts.length + dailyAlert.length > 0) onAlertsRef.current([...dailyAlert, ...alerts]);
+          if (alerts.length + bigAlerts.length > 0) onAlertsRef.current([...bigAlerts, ...alerts]);
         }
         setData(payload);
         setError(null);
@@ -191,11 +201,15 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
 /** variant "simple" = campanha (direto ao ponto); "full" = visão completa (/completo). */
 export default function Dashboard({ variant = "simple" }: { variant?: "simple" | "full" }) {
   const now = useClock();
-  const [queue, setQueue] = useState<Alert[]>([]);
+  const [queue, setQueue] = useState<ToastAlert[]>([]);
   // som ligado por padrão (o botão ainda permite desligar)
   const [sound, setSound] = useState(true);
   useEffect(() => {
-    const unlock = () => getAudio();
+    const unlock = () => {
+      const ctx = getAudio();
+      preloadVictory(ctx);
+      void ctx?.resume().then(() => flushPendingVictory(ctx)).catch(() => {});
+    };
     unlock();
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("keydown", unlock);
@@ -209,13 +223,74 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
     soundRef.current = sound;
   }, [sound]);
 
+  const [finale, setFinale] = useState<Extract<Alert, { kind: "goal" }> | null>(null);
   const onAlerts = useCallback((alerts: Alert[]) => {
-    setQueue((q) => [...q, ...alerts].slice(-6));
+    // grande final (meta de 200): tela cheia, show de fogos e sons em sequência
+    const goal = alerts.find((a) => a.kind === "goal");
+    if (goal) {
+      setFinale(goal);
+      fireworksShow(14000);
+      if (soundRef.current) playCelebration(getAudio(), "finale");
+      const rest = alerts.filter(isToast).filter((a) => a.kind !== "daily");
+      setQueue((q) => [...q, ...rest].slice(-6));
+      return;
+    }
+    setQueue((q) => [...q, ...alerts.filter(isToast)].slice(-6));
+    const daily = alerts.some((a) => a.kind === "daily");
+    // meta do dia: confete na tela sempre; som de vitória se o som estiver ligado
+    if (daily) confettiBurst(5000);
     if (soundRef.current) {
-      if (alerts.some((a) => a.kind === "daily")) playHorn();
+      if (daily) playVictory(getAudio());
       else playChaChing();
     }
   }, []);
+
+  // meta do dia atual (o alerta simulado mostra o número real)
+  const goalRef = useRef(18);
+  // simulação da grande final: força o "modo campeão" sem mexer na planilha
+  const [forceChampion, setForceChampion] = useState(false);
+  const simGoalRef = useRef<{ cof: number; goal: number; mvp: Mvp }>({ cof: 200, goal: 200, mvp: null });
+
+  // ---- modo de teste: ?simular=true (ou meta | lead | cof) ----
+  // dispara o alerta 3s após abrir; depois, teclas M (meta), L (lead) e C (COF)
+  const sim = useSyncExternalStore(noopSubscribe, readSimParam, () => null);
+  const audioState = useSyncExternalStore(subscribeAudio, readAudioState, serverAudioState);
+  const soundBlocked = sound && audioState !== "running";
+  useEffect(() => {
+    if (!sim) return;
+    const fake: Lead = {
+      id: "sim", row: 0, ts: Date.now(), hasTime: true, nome: "Lead T.", cidade: "São Paulo", uf: "SP",
+      vendedor: "Fernando", etapa: "Envio COF e Materiais", qualificacao: "", venda: false, cof: true,
+    };
+    const fire = (kind: "daily" | "lead" | "cof" | "goal") => {
+      if (kind === "goal") {
+        setForceChampion(true);
+        onAlerts([{ kind, cof: simGoalRef.current.cof, goal: simGoalRef.current.goal, mvp: simGoalRef.current.mvp }]);
+        return;
+      }
+      onAlerts([
+        kind === "daily"
+          ? { kind, cofToday: goalRef.current, dailyGoal: goalRef.current, day: `sim-${Date.now()}` }
+          : { kind, lead: { ...fake, id: `sim-${Date.now()}` } },
+      ]);
+    };
+    const first =
+      sim === "lead" ? "lead" : sim === "cof" ? "cof" : sim === "200" || sim === "final" || sim === "campeao" ? "goal" : "daily";
+    const t = setTimeout(() => fire(first), 3000);
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (k === "m") fire("daily");
+      else if (k === "l") fire("lead");
+      else if (k === "c") fire("cof");
+      else if (k === "g") fire("goal");
+      else if (k === "r") setForceChampion(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [sim, onAlerts]);
 
   const dismissToast = useCallback(() => setQueue((q) => q.slice(1)), []);
 
@@ -227,6 +302,20 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
     () => (data && minute ? computeStats(data.leads, minute, data.goal) : null),
     [data, minute],
   );
+  useEffect(() => {
+    if (stats?.dailyGoal) goalRef.current = stats.dailyGoal;
+    if (stats && data)
+      simGoalRef.current = { cof: Math.max(stats.cof, data.goal), goal: data.goal, mvp: mvpOf(stats.ranking) ?? { name: "Fernando", cof: 112 } };
+  }, [stats, data]);
+
+  // modo campeão: meta de 200 batida (ou simulada) → tema dourado + brilho caindo
+  const champion = !!(stats && data && (stats.cof >= data.goal || forceChampion));
+  useEffect(() => {
+    document.documentElement.classList.toggle("champion", champion);
+    if (!champion) return;
+    return startAmbientSparkles();
+  }, [champion]);
+  const dismissFinale = useCallback(() => setFinale(null), []);
 
   const current = queue[0];
   const highlight = current && current.kind !== "daily" && current.lead.vendedor ? norm(current.lead.vendedor) : null;
@@ -266,6 +355,20 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
           : "mx-auto flex w-full max-w-[1920px] flex-col gap-4 px-4 pb-6 sm:px-6"
       }
     >
+      {soundBlocked && (
+        <button
+          onClick={() => getAudio()}
+          className="fixed bottom-3 right-3 z-40 flex items-center gap-1.5 rounded-full border border-amber-400/60 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200"
+        >
+          <VolumeX size={13} /> som bloqueado pelo navegador · clique na tela para ativar
+        </button>
+      )}
+      {sim && (
+        <div className="fixed bottom-3 left-3 z-40 rounded-full border border-sky-400/50 bg-sky-500/15 px-3 py-1 text-xs font-semibold text-sky-200">
+          MODO SIMULAÇÃO · M = meta do dia · G = meta de 200 · R = sair do modo campeão · L = lead · C = COF
+        </div>
+      )}
+      {finale && <FinaleOverlay key={finale.cof} cof={finale.cof} goal={finale.goal} mvp={finale.mvp} onDone={dismissFinale} />}
       {current && (
         current.kind === "daily" ? (
           <DailyGoalToast key={`daily-${current.day}`} cofToday={current.cofToday} dailyGoal={current.dailyGoal} onDone={dismissToast} />
@@ -287,10 +390,10 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
 
         <div className={stage ? "text-center" : "order-3 w-full text-center lg:order-none lg:w-auto"}>
           <h1 className="font-display text-5xl leading-none tracking-wide sm:text-6xl">
-            <span className="glow-text text-bf">BLACK</span> FRIDAY
+            {champion ? <span className="gold-text">BLACK FRIDAY</span> : <><span className="glow-text text-bf">BLACK</span> FRIDAY</>}
           </h1>
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-zinc-400 sm:text-xs">
-            Corrida da Expansão · Leads em COF
+            {champion ? "🏆 Meta batida · Corrida da Expansão" : "Corrida da Expansão · Leads em COF"}
           </p>
         </div>
 
@@ -318,7 +421,11 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
         </div>
       </header>
 
-      <div className="hazard h-2.5 rounded-full opacity-90" />
+      {champion ? (
+        <div className="checkered h-5 rounded-md opacity-90" />
+      ) : (
+        <div className="hazard h-2.5 rounded-full opacity-90" />
+      )}
 
       {!stats ? (
         <div className="panel grid h-[60vh] place-items-center text-zinc-400">
@@ -333,7 +440,15 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
         </div>
       ) : variant === "simple" ? (
         <>
-          <GoalHero stats={stats} goal={data!.goal} columns={data!.columns} />
+          {champion ? (
+            <ChampionHero
+              stats={forceChampion ? { ...stats, cof: Math.max(stats.cof, data!.goal) } : stats}
+              goal={data!.goal}
+              mvp={mvpOf(stats.ranking) ?? (forceChampion ? { name: "Fernando", cof: 112 } : null)}
+            />
+          ) : (
+            <GoalHero stats={stats} goal={data!.goal} columns={data!.columns} />
+          )}
           <div className={stage ? "grid min-h-0 flex-1 grid-cols-12 gap-4" : "grid items-start gap-4 xl:grid-cols-12"}>
             <section className={stage ? "col-span-8 min-h-0" : "min-w-0 xl:col-span-8"}>
               <Ranking

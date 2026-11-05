@@ -103,3 +103,91 @@ html.idle .idle-hide {
   .animate-toast, .animate-flash, .animate-bar, .animate-rise { animation-duration: 0.01s; }
   .hazard { animation: none; }
 }
+
+/* ============ Grande final (meta de 200) e modo campeão ============ */
+@keyframes shimmer {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+.gold-text {
+  background: linear-gradient(90deg, #b8860b, #ffd700, #fff6c2, #ffd700, #b8860b);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.5s linear infinite;
+  filter: drop-shadow(0 0 18px rgba(255, 215, 0, 0.45));
+}
+.gold-bar {
+  background: linear-gradient(90deg, #b8860b, #ffd700, #fff6c2, #ffd700, #b8860b);
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+  box-shadow: 0 0 18px rgba(255, 215, 0, 0.6);
+}
+
+@keyframes rays { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.sunburst {
+  background: repeating-conic-gradient(from 0deg, rgba(255, 215, 0, 0.16) 0 8deg, transparent 8deg 16deg);
+  border-radius: 9999px;
+  animation: rays 30s linear infinite;
+}
+.champion-panel .sunburst { animation-name: spin-plain; }
+@keyframes spin-plain { to { transform: rotate(360deg); } }
+
+@keyframes finale-in {
+  0% { opacity: 0; }
+  6% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-finale { animation: finale-in 15s ease forwards; }
+
+@keyframes flash-screen { from { opacity: 0.95; } to { opacity: 0; } }
+.animate-flash-screen { animation: flash-screen 1.2s ease-out forwards; }
+
+@keyframes pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-pop { animation: pop 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-16px) rotate(3deg); }
+}
+.animate-float { animation: float 3s ease-in-out infinite; }
+
+/* bandeira quadriculada de chegada (substitui a faixa zebrada no modo campeão) */
+.checkered {
+  background-image: conic-gradient(#ffffff 25%, #0a0a0a 0 50%, #ffffff 0 75%, #0a0a0a 0);
+  background-size: 20px 20px;
+  animation: checker 1.2s linear infinite;
+}
+@keyframes checker { to { background-position: 20px 0; } }
+
+/* modo campeão: fundo dourado/verde vivo, painéis com borda dourada */
+@keyframes aurora {
+  0%, 100% { background-position: 0% 0%, 100% 100%, 0% 100%; }
+  50% { background-position: 30% 10%, 70% 90%, 20% 80%; }
+}
+html.champion body {
+  background-image:
+    radial-gradient(1400px 700px at 50% -10%, rgba(255, 215, 0, 0.3), transparent 70%),
+    radial-gradient(1000px 600px at 0% 100%, rgba(52, 211, 153, 0.18), transparent 70%),
+    radial-gradient(1000px 600px at 100% 100%, rgba(255, 215, 0, 0.16), transparent 70%);
+  background-size: 140% 140%;
+  animation: aurora 12s ease-in-out infinite;
+}
+html.champion .panel {
+  border-color: rgba(255, 215, 0, 0.35);
+  box-shadow: inset 0 0 40px rgba(255, 215, 0, 0.06);
+}
+.champion-panel {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.14), rgba(10, 10, 10, 0.92) 45%, rgba(52, 211, 153, 0.12));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gold-text, .gold-bar, .sunburst, .checkered, .animate-float { animation: none; }
+  html.champion body { animation: none; }
+}
