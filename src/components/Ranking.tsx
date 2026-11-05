@@ -36,7 +36,19 @@ function OnFire({ today }: { today: number }) {
   );
 }
 
-function Podium({ row, idx, highlight, gap }: { row: RankRow; idx: number; highlight: boolean; gap: number | null }) {
+function Podium({
+  row,
+  idx,
+  highlight,
+  gap,
+  cofOnly,
+}: {
+  row: RankRow;
+  idx: number;
+  highlight: boolean;
+  gap: number | null;
+  cofOnly: boolean;
+}) {
   const m = MEDAL[idx];
   return (
     <div className={`flex flex-1 flex-col items-center ${idx === 0 ? "order-2" : idx === 1 ? "order-1" : "order-3"}`}>
@@ -60,7 +72,7 @@ function Podium({ row, idx, highlight, gap }: { row: RankRow; idx: number; highl
         <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">leads</span>
         <span className={`mt-2 rounded-full px-2.5 py-0.5 text-base font-black ${m.bg}`}>{idx + 1}º</span>
         <span className="mt-1.5 text-[11px] text-zinc-500">
-          +{row.today} hoje · <b className="text-bf">{row.cof} COF</b> · {row.qualified} qualif.{row.won > 0 ? ` · ${row.won} venda${row.won > 1 ? "s" : ""}` : ""}
+          +{row.today} hoje · <b className="text-bf">{row.cof} COF</b> {cofOnly ? "" : ` · ${row.qualified} qualif.`}{row.won > 0 ? ` · ${row.won} venda${row.won > 1 ? "s" : ""}` : ""}
         </span>
         {gap != null && (
           <span className="mt-0.5 px-1 text-center text-[11px] text-zinc-400">
@@ -77,11 +89,13 @@ export default function Ranking({
   highlight,
   hasColumn,
   className = "",
+  cofOnly = false,
 }: {
   rows: RankRow[];
   highlight: string | null;
   hasColumn: boolean;
   className?: string;
+  cofOnly?: boolean; // tela da campanha: só COF, sem qualificados
 }) {
   const leader = rows[0];
   const top = rows.slice(0, 3);
@@ -129,6 +143,7 @@ export default function Ranking({
                 idx={i}
                 highlight={highlight === r.key}
                 gap={i > 0 ? rows[i - 1].total - r.total + 1 : null}
+                cofOnly={cofOnly}
               />
             ))}
           </div>
@@ -162,7 +177,8 @@ export default function Ranking({
                         />
                       </div>
                       <p className="mt-1 text-[11px] text-zinc-500">
-                        faltam <b className="text-bf">{gap}</b> para passar {above.name.split(" ")[0]} · +{r.today} hoje · <b className="text-zinc-300">{r.cof} COF</b> · {r.qualified} qualif.
+                        faltam <b className="text-bf">{gap}</b> para passar {above.name.split(" ")[0]} · +{r.today} hoje · <b className="text-zinc-300">{r.cof} COF</b>
+                        {cofOnly ? "" : ` · ${r.qualified} qualif.`}
                       </p>
                     </div>
                     <span className="font-display text-3xl tabular-nums">{r.total}</span>

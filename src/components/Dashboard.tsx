@@ -265,10 +265,11 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
                 highlight={highlight}
                 hasColumn={data!.columns.responsavel}
                 className={stage ? "h-full overflow-hidden" : ""}
+                cofOnly
               />
             </section>
             <section className={stage ? "col-span-4 min-h-0" : "min-w-0 xl:col-span-4"}>
-              <Feed leads={stats.recent.slice(0, 6)} now={now} className={stage ? "h-full overflow-hidden" : ""} />
+              <Feed leads={stats.recent.slice(0, 6)} now={now} className={stage ? "h-full overflow-hidden" : ""} cofOnly />
             </section>
           </div>
         </>

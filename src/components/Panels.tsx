@@ -261,7 +261,17 @@ export function Funnel({ funnel, total, qualification }: { funnel: Stats["funnel
 }
 
 // ---------------- Feed ----------------
-export function Feed({ leads, now, className = "" }: { leads: Lead[]; now: number; className?: string }) {
+export function Feed({
+  leads,
+  now,
+  className = "",
+  cofOnly = false,
+}: {
+  leads: Lead[];
+  now: number;
+  className?: string;
+  cofOnly?: boolean; // tela da campanha: mostra "COF enviada" em vez de "qualificado"
+}) {
   return (
     <div className={`panel flex-1 p-4 sm:p-5 ${className}`}>
       <h2 className="mb-3 flex items-center gap-2 font-display text-2xl tracking-wide">
@@ -289,12 +299,19 @@ export function Feed({ leads, now, className = "" }: { leads: Lead[]; now: numbe
                   ) : (
                     <span className="text-amber-400">Sem Responsável</span>
                   )}
-                  {isQualified(l) && (
-                    <span className="ml-1.5 text-emerald-400">
-                      <BadgeCheck size={11} className="mr-0.5 inline" />
-                      qualificado
-                    </span>
-                  )}
+                  {cofOnly
+                    ? l.cof && (
+                        <span className="ml-1.5 font-semibold text-emerald-400">
+                          <BadgeCheck size={11} className="mr-0.5 inline" />
+                          COF enviada
+                        </span>
+                      )
+                    : isQualified(l) && (
+                        <span className="ml-1.5 text-emerald-400">
+                          <BadgeCheck size={11} className="mr-0.5 inline" />
+                          qualificado
+                        </span>
+                      )}
                 </p>
               </div>
               <div className="shrink-0 text-right">
