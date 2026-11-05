@@ -23,26 +23,36 @@ function useClock() {
 }
 
 // ---- som de "novo lead" (WebAudio, sem arquivo) ----
-function playChaChing() {
+// Um AudioContext só, reaproveitado. O Chrome só libera som depois de um
+// clique/tecla na página (ou com --autoplay-policy=no-user-gesture-required
+// no atalho do navegador da TV); por isso tentamos "destravar" em toda interação.
+let audioCtx: AudioContext | null = null;
+function getAudio(): AudioContext | null {
   try {
-    const ctx = new AudioContext();
-    [880, 1320].forEach((freq, i) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "triangle";
-      o.frequency.value = freq;
-      const t = ctx.currentTime + i * 0.12;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-      o.connect(g).connect(ctx.destination);
-      o.start(t);
-      o.stop(t + 0.4);
-    });
-    setTimeout(() => ctx.close(), 1000);
+    audioCtx ??= new AudioContext();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+    return audioCtx;
   } catch {
-    /* navegador bloqueou áudio */
+    return null;
   }
+}
+
+function playChaChing() {
+  const ctx = getAudio();
+  if (!ctx) return;
+  [880, 1320].forEach((freq, i) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "triangle";
+    o.frequency.value = freq;
+    const t = ctx.currentTime + i * 0.12;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    o.connect(g).connect(ctx.destination);
+    o.start(t);
+    o.stop(t + 0.4);
+  });
 }
 
 // trava contra recarregar em loop (ex.: durante a troca de versão na Vercel)
@@ -134,7 +144,18 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
 export default function Dashboard({ variant = "simple" }: { variant?: "simple" | "full" }) {
   const now = useClock();
   const [queue, setQueue] = useState<Alert[]>([]);
-  const [sound, setSound] = useState(false);
+  // som ligado por padrão (o botão ainda permite desligar)
+  const [sound, setSound] = useState(true);
+  useEffect(() => {
+    const unlock = () => getAudio();
+    unlock();
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
   const soundRef = useRef(sound);
   useEffect(() => {
     soundRef.current = sound;
