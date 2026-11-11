@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BadgeCheck, CalendarDays, Megaphone, Clock, Filter, Flame, MapPin, Radio, Target, TrendingDown, TrendingUp, TriangleAlert, Users, Zap } from "lucide-react";
+import { BadgeCheck, CalendarDays, Megaphone, Clock, Send, UserCheck, Filter, Flame, MapPin, Radio, Target, TrendingDown, TrendingUp, TriangleAlert, Users, Zap } from "lucide-react";
 import { BLACK_FRIDAY_DAY, CAMPAIGN_END, LOST_STAGE, STAGES } from "@/lib/config";
 import { dayKey, isQualified, timeAgo, type Stats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
@@ -136,6 +136,12 @@ export function Kpis({ stats, goal, columns }: { stats: Stats; goal: number; col
           ) : (
             `faltam ${fmt(goal - stats.cof)} COFs enviadas`
           )}
+          <span className="mt-0.5 block">
+            <Send size={12} className="mr-1 inline text-sky-300" />
+            <b className="text-sky-300">{fmt(stats.convite)}</b> convites ·{" "}
+            <UserCheck size={12} className="mr-1 inline text-emerald-400" />
+            <b className="text-emerald-400">{fmt(stats.presenca)}</b> presenças
+          </span>
         </div>
       </div>
     </div>
@@ -184,6 +190,79 @@ export function DailyGoal({ stats }: { stats: Stats }) {
   );
 }
 
+// ---------------- Convites e presenças ----------------
+function StatusTile({
+  icon,
+  label,
+  value,
+  hasColumn,
+  column,
+  color,
+  border,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  hasColumn: boolean;
+  column: string;
+  color: string;
+  border: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`flex min-w-52 flex-1 flex-col rounded-2xl border bg-zinc-900/60 p-4 ${border}`}>
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+        {icon} {label}
+      </p>
+      <p className={`mt-1 font-display text-7xl leading-none tabular-nums ${hasColumn ? color : "text-zinc-600"}`}>
+        {hasColumn ? fmt(value) : "—"}
+      </p>
+      <p className="mt-auto pt-2 text-sm text-zinc-400">
+        {hasColumn ? (
+          children
+        ) : (
+          <span className="text-amber-400">
+            <TriangleAlert size={13} className="mr-1 inline" />
+            crie a coluna &quot;{column}&quot;
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+const pctOf = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+
+export function StatusTiles({ stats, columns }: { stats: Stats; columns: LeadsPayload["columns"] }) {
+  return (
+    <div className="flex flex-1 items-stretch gap-4 self-stretch xl:max-w-xl">
+      <StatusTile
+        icon={<Send size={14} className="text-sky-300" />}
+        label="Convites enviados"
+        value={stats.convite}
+        hasColumn={columns.convite}
+        column="Convite Enviado"
+        color="text-sky-300"
+        border="border-sky-400/30"
+      >
+        <b className="text-white">{pctOf(stats.convite, stats.cof)}%</b> das COFs enviadas
+      </StatusTile>
+      <StatusTile
+        icon={<UserCheck size={14} className="text-emerald-400" />}
+        label="Presenças confirmadas"
+        value={stats.presenca}
+        hasColumn={columns.presenca}
+        column="Presença Confirmada"
+        color="text-emerald-400"
+        border="border-emerald-400/30"
+      >
+        <b className="text-white">{pctOf(stats.presenca, stats.convite)}%</b> dos convites
+      </StatusTile>
+    </div>
+  );
+}
+
 // ---------------- Meta em destaque (visão simples) ----------------
 export function GoalHero({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
   const pct = Math.min(100, Math.round((stats.cof / goal) * 100));
@@ -193,7 +272,7 @@ export function GoalHero({ stats, goal, columns }: { stats: Stats; goal: number;
     <div className="panel relative overflow-hidden border-bf/50 p-5 sm:p-7">
       <div className="absolute inset-x-0 top-0 h-1 bg-bf" />
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="mr-auto">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-zinc-400 sm:text-sm">
             <Target size={16} className="text-bf" /> Meta da Black · COFs enviadas
           </p>
@@ -203,6 +282,7 @@ export function GoalHero({ stats, goal, columns }: { stats: Stats; goal: number;
             <span className="ml-2 text-4xl tabular-nums text-white sm:text-6xl">{pct}%</span>
           </p>
         </div>
+        <StatusTiles stats={stats} columns={columns} />
         {stats.daysLeft > 0 && <DailyGoal stats={stats} />}
       </div>
 
@@ -343,12 +423,24 @@ export function Feed({
                     <span className="text-amber-400">Sem Responsável</span>
                   )}
                   {cofOnly
-                    ? l.cof && (
+                    ? (l.presenca && (
                         <span className="ml-1.5 font-semibold text-emerald-400">
+                          <UserCheck size={11} className="mr-0.5 inline" />
+                          presença confirmada
+                        </span>
+                      )) ||
+                      (l.convite && (
+                        <span className="ml-1.5 font-semibold text-sky-300">
+                          <Send size={11} className="mr-0.5 inline" />
+                          convite enviado
+                        </span>
+                      )) ||
+                      (l.cof && (
+                        <span className="ml-1.5 font-semibold text-bf">
                           <BadgeCheck size={11} className="mr-0.5 inline" />
                           COF enviada
                         </span>
-                      )
+                      ))
                     : isQualified(l) && (
                         <span className="ml-1.5 text-emerald-400">
                           <BadgeCheck size={11} className="mr-0.5 inline" />

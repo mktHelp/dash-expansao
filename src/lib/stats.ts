@@ -14,11 +14,16 @@ export const isQualified = (l: Lead) => norm(l.qualificacao) === "qualificado";
 export type RankRow = {
   key: string;
   name: string;
+  value: number; // o que o ranking conta: leads (painel completo) ou COFs (tela da campanha)
+  valueToday: number; // quanto desse valor entrou hoje
   total: number;
   today: number;
   qualified: number;
   won: number;
   cof: number;
+  cofToday: number;
+  convite: number;
+  presenca: number;
   lastTs: number | null;
   position: number;
   delta: number | null; // posições ganhas nas últimas 24h (null = estreante)
@@ -33,10 +38,13 @@ export type Stats = {
   won: number;
   cof: number; // linhas com COF Enviada = Sim (conta para a meta)
   cofToday: number; // COF Enviada = Sim com Data de envio = hoje
+  convite: number; // Convite Enviado = Sim
+  presenca: number; // Presença Confirmada = Sim
   daysLeft: number; // dias até o fim da campanha, contando hoje (0 = acabou)
   dailyGoal: number; // (meta - COFs até ontem) / dias restantes, arredondado p/ cima
   unassigned: number; // leads sem Responsável
-  ranking: RankRow[];
+  ranking: RankRow[]; // por leads cadastrados (painel completo)
+  cofRanking: RankRow[]; // por COFs enviadas (tela da campanha)
   funnel: { stage: string; count: number }[];
   qualification: { label: string; count: number }[];
   monthly: { month: string; count: number }[]; // "AAAA-MM"
@@ -63,8 +71,11 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
   let won = 0;
   let cof = 0;
   let cofToday = 0;
+  let convite = 0;
+  let presenca = 0;
   let unassigned = 0;
-  const sellers = new Map<string, Omit<RankRow, "position" | "delta"> & { before: number }>();
+  type Seller = Omit<RankRow, "position" | "delta" | "value" | "valueToday"> & { before: number; cofBefore: number };
+  const sellers = new Map<string, Seller>();
   const stageCount = new Map<string, number>();
   const qualCount = new Map<string, number>();
   const monthCount = new Map<string, number>();
@@ -81,6 +92,8 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     if (l.venda) won++;
     if (l.cof) cof++;
     if (l.cof && isToday) cofToday++;
+    if (l.convite) convite++;
+    if (l.presenca) presenca++;
     if (l.cof && k) inc(cofDayCount, k);
     if (k) inc(monthCount, k.slice(0, 7));
     inc(stageCount, l.etapa);
@@ -92,50 +105,83 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
       continue;
     }
     const key = norm(l.vendedor);
-    const s = sellers.get(key) ?? { key, name: l.vendedor, total: 0, today: 0, qualified: 0, won: 0, cof: 0, lastTs: null, before: 0 };
+    const s: Seller = sellers.get(key) ?? {
+      key, name: l.vendedor, total: 0, today: 0, qualified: 0, won: 0, cof: 0, cofToday: 0,
+      convite: 0, presenca: 0, lastTs: null, before: 0, cofBefore: 0,
+    };
+    const old = l.ts == null || l.ts < cutoff24h;
     s.total++;
     if (isToday) s.today++;
     if (q) s.qualified++;
     if (l.venda) s.won++;
     if (l.cof) s.cof++;
-    if (l.ts == null || l.ts < cutoff24h) s.before++;
+    if (l.cof && isToday) s.cofToday++;
+    if (l.convite) s.convite++;
+    if (l.presenca) s.presenca++;
+    if (old) s.before++;
+    if (l.cof && old) s.cofBefore++;
     if (l.ts != null && (s.lastTs == null || l.ts > s.lastTs)) s.lastTs = l.ts;
     sellers.set(key, s);
   }
 
-  // desempate: mais COF enviadas, mais vendas, mais qualificados, quem chegou primeiro
-  type Score = { total: number; cof: number; won: number; qualified: number; lastTs: number | null };
-  const byScore = (a: Score, b: Score) =>
-    b.total - a.total || b.cof - a.cof || b.won - a.won || b.qualified - a.qualified || (a.lastTs ?? Infinity) - (b.lastTs ?? Infinity);
+  // Monta um ranking a partir de uma métrica. Posição "olímpica": quem tem o
+  // mesmo valor divide a posição (1º, 1º, 3º); o desempate só ordena a lista.
+  const rank = (
+    valueOf: (s: Seller) => number,
+    todayOf: (s: Seller) => number,
+    beforeOf: (s: Seller) => number,
+    tiebreak: (a: Seller, b: Seller) => number,
+  ): RankRow[] => {
+    // posições de 24h atrás, para mostrar quem subiu/caiu
+    const prevPos = new Map<string, number>();
+    [...sellers.values()]
+      .filter((s) => beforeOf(s) > 0)
+      .sort((a, b) => beforeOf(b) - beforeOf(a))
+      .forEach((s, i) => prevPos.set(s.key, i + 1));
 
-  // posições de 24h atrás, para mostrar quem subiu/caiu
-  const prevPos = new Map<string, number>();
-  [...sellers.values()]
-    .filter((s) => s.before > 0)
-    .sort((a, b) => b.before - a.before)
-    .forEach((s, i) => prevPos.set(s.key, i + 1));
+    const sorted = [...sellers.values()].sort(
+      (a, b) => valueOf(b) - valueOf(a) || tiebreak(a, b) || (a.lastTs ?? Infinity) - (b.lastTs ?? Infinity),
+    );
+    const positions: number[] = [];
+    sorted.forEach((s, i) => {
+      positions.push(i > 0 && valueOf(s) === valueOf(sorted[i - 1]) ? positions[i - 1] : i + 1);
+    });
+    return sorted.map((s, i) => {
+      const prev = prevPos.get(s.key);
+      return {
+        key: s.key,
+        name: s.name,
+        total: s.total,
+        today: s.today,
+        qualified: s.qualified,
+        won: s.won,
+        cof: s.cof,
+        cofToday: s.cofToday,
+        convite: s.convite,
+        presenca: s.presenca,
+        lastTs: s.lastTs,
+        value: valueOf(s),
+        valueToday: todayOf(s),
+        position: positions[i],
+        delta: !hasHistory ? 0 : prev == null ? null : prev - positions[i],
+      };
+    });
+  };
 
-  // posição "olímpica": quem tem o mesmo nº de leads divide a posição (1º, 1º, 3º)
-  const sorted = [...sellers.values()].sort(byScore);
-  const positions: number[] = [];
-  sorted.forEach((s, i) => {
-    positions.push(i > 0 && s.total === sorted[i - 1].total ? positions[i - 1] : i + 1);
-  });
-  const ranking: RankRow[] = sorted.map((s, i) => {
-    const prev = prevPos.get(s.key);
-    return {
-      key: s.key,
-      name: s.name,
-      total: s.total,
-      today: s.today,
-      qualified: s.qualified,
-      won: s.won,
-      cof: s.cof,
-      lastTs: s.lastTs,
-      position: positions[i],
-      delta: !hasHistory ? 0 : prev == null ? null : prev - positions[i],
-    };
-  });
+  // por leads — desempate: mais COF enviadas, mais vendas, mais qualificados, quem chegou primeiro
+  const ranking = rank(
+    (s) => s.total,
+    (s) => s.today,
+    (s) => s.before,
+    (a, b) => b.cof - a.cof || b.won - a.won || b.qualified - a.qualified,
+  );
+  // por COFs — desempate: mais presenças, mais convites, mais leads, quem chegou primeiro
+  const cofRanking = rank(
+    (s) => s.cof,
+    (s) => s.cofToday,
+    (s) => s.cofBefore,
+    (a, b) => b.presenca - a.presenca || b.convite - a.convite || b.total - a.total,
+  );
 
   // funil: etapas conhecidas na ordem, desconhecidas antes de "Venda Perdida"
   const known = STAGES.filter((s) => s !== LOST_STAGE).map((stage) => ({ stage, count: stageCount.get(stage) ?? 0 }));
@@ -188,10 +234,13 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     won,
     cof,
     cofToday,
+    convite,
+    presenca,
     daysLeft,
     dailyGoal,
     unassigned,
     ranking,
+    cofRanking,
     funnel,
     qualification: [...qualCount.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     monthly,

@@ -260,7 +260,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
     if (!sim) return;
     const fake: Lead = {
       id: "sim", row: 0, ts: Date.now(), hasTime: true, nome: "Lead T.", cidade: "São Paulo", uf: "SP",
-      vendedor: "Fernando", etapa: "Envio COF e Materiais", qualificacao: "", venda: false, cof: true,
+      vendedor: "Fernando", etapa: "Envio COF e Materiais", qualificacao: "", venda: false, cof: true, convite: false, presenca: false,
     };
     const fire = (kind: "daily" | "lead" | "cof" | "goal") => {
       if (kind === "goal") {
@@ -452,7 +452,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
           <div className={stage ? "grid min-h-0 flex-1 grid-cols-12 gap-4" : "grid items-start gap-4 xl:grid-cols-12"}>
             <section className={stage ? "col-span-8 min-h-0" : "min-w-0 xl:col-span-8"}>
               <Ranking
-                rows={stats.ranking}
+                rows={stats.cofRanking}
                 highlight={highlight}
                 hasColumn={data!.columns.responsavel}
                 className={stage ? "h-full overflow-hidden" : ""}

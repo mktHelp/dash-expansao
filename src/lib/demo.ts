@@ -42,6 +42,7 @@ export function demoRows(now: number): string[][] {
     "Mês COF", "Data de envio", "Candidato", "WhatsApp", "E-mail", "Cidade", "UF", "Qualificação",
     "Capital declarado no CRM", "Etapa atual no CRM", "Etapa anterior no CRM", "Categoria atual (TurboCRM)",
     "Categoria anterior (TurboCRM)", "Venda efetivada", "Encontrado em", "Como foi encontrado", "Responsável", "COF Enviada",
+    "Convite Enviado", "Presença Confirmada",
   ]];
   const SLOT = 2 * 60_000;
   for (let ts = CAMPAIGN_START, k = 0; ts <= now; ts += SLOT, k++) {
@@ -61,6 +62,8 @@ export function demoRows(now: number): string[][] {
       QUALIF[Math.floor(r(5) * QUALIF.length)], "", etapa, "", "", "", venda, "", "",
       r(8) < 0.04 ? "" : v, // alguns sem responsável, como acontece na vida real
       r(9) < 0.7 ? "Sim" : "Não",
+      r(9) < 0.4 ? "Sim" : "", // convite só sai para quem recebeu COF
+      r(9) < 0.2 ? "Sim" : "", // e a presença, só para quem recebeu convite
     ]);
   }
   return rows;

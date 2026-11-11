@@ -4,7 +4,7 @@ import type { Lead, LeadsPayload } from "./types";
 import { hashId, isYes, norm, parseBRDate, shortName, titleCase, toStage, toUF } from "./normalize";
 import { demoRows } from "./demo";
 
-type Field = "data" | "nome" | "email" | "telefone" | "cidade" | "uf" | "vendedor" | "etapa" | "qualificacao" | "venda" | "cof";
+type Field = "data" | "nome" | "email" | "telefone" | "cidade" | "uf" | "vendedor" | "etapa" | "qualificacao" | "venda" | "cof" | "convite" | "presenca";
 
 // Nomes aceitos no cabeçalho (linha 1). A ordem das colunas não importa.
 // Padrão: planilha "Relatório COF", aba "Qualificação COF 2026".
@@ -20,6 +20,8 @@ const ALIASES: Record<Field, string[]> = {
   qualificacao: ["qualificacao"],
   venda: ["venda efetivada"],
   cof: ["cof enviada", "cof enviada?", "enviou cof", "cof"],
+  convite: ["convite enviado", "convite enviado?", "convite"],
+  presenca: ["presenca confirmada", "presenca confirmada?", "presenca"],
 };
 
 const CACHE_TTL_MS = 8_000;
@@ -167,7 +169,12 @@ function rowsToLeads(rows: string[][]): Pick<LeadsPayload, "leads" | "columns"> 
   (Object.keys(ALIASES) as Field[]).forEach((f) => {
     col[f] = header.findIndex((h) => ALIASES[f].includes(h));
   });
-  const columns = { responsavel: col.vendedor >= 0, cofEnviada: col.cof >= 0 };
+  const columns = {
+    responsavel: col.vendedor >= 0,
+    cofEnviada: col.cof >= 0,
+    convite: col.convite >= 0,
+    presenca: col.presenca >= 0,
+  };
   const get = (r: string[], f: Field) => (col[f] >= 0 ? String(r[col[f]] ?? "").trim() : "");
 
   const leads: Lead[] = [];
@@ -198,6 +205,8 @@ function rowsToLeads(rows: string[][]): Pick<LeadsPayload, "leads" | "columns"> 
       qualificacao: get(r, "qualificacao"),
       venda: isYes(get(r, "venda")),
       cof: isYes(get(r, "cof")),
+      convite: isYes(get(r, "convite")),
+      presenca: isYes(get(r, "presenca")),
     });
   }
   return { leads, columns };

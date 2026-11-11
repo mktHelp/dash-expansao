@@ -12,12 +12,14 @@ export type Lead = {
   qualificacao: string; // "Qualificado" | "Não qualificado" | "Sem informação de capital" | ...
   venda: boolean; // coluna "Venda efetivada" preenchida
   cof: boolean; // coluna "COF Enviada" = Sim (conta 1 na meta)
+  convite: boolean; // coluna "Convite Enviado" = Sim
+  presenca: boolean; // coluna "Presença Confirmada" = Sim
 };
 
 export type LeadsPayload = {
   leads: Lead[];
   // colunas novas encontradas no cabeçalho (para avisar no painel se faltarem)
-  columns: { responsavel: boolean; cofEnviada: boolean };
+  columns: { responsavel: boolean; cofEnviada: boolean; convite: boolean; presenca: boolean };
   goal: number;
   source: "sheets" | "csv" | "demo";
   fetchedAt: number;

@@ -45,6 +45,25 @@ function OnFire({ today }: { today: number }) {
   );
 }
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** "+2 hoje · 3 convites · 1 presença" (campanha) ou "+2 hoje · 3 COF · 1 qualif." (completo) */
+function Details({ row, cofOnly, strong }: { row: RankRow; cofOnly: boolean; strong: string }) {
+  if (cofOnly)
+    return (
+      <>
+        +{row.valueToday} hoje · <b className="text-sky-300">{plural(row.convite, "convite", "convites")}</b> ·{" "}
+        <b className="text-emerald-400">{plural(row.presenca, "presença", "presenças")}</b>
+      </>
+    );
+  return (
+    <>
+      +{row.today} hoje · <b className={strong}>{row.cof} COF</b> · {row.qualified} qualif.
+      {row.won > 0 ? ` · ${plural(row.won, "venda", "vendas")}` : ""}
+    </>
+  );
+}
+
 function Podium({
   row,
   idx,
@@ -74,18 +93,20 @@ function Podium({
       <div className="mt-0.5 flex items-center gap-1.5">
         <Tie show={!!tiedWith} />
         <Delta delta={row.delta} />
-        <OnFire today={row.today} />
+        <OnFire today={row.valueToday} />
       </div>
       <div
         className={`mt-2 flex w-full flex-col items-center justify-start rounded-t-xl pt-3 pb-2 ${m.height} ${
           row.position === 1 ? "bg-gradient-to-b from-bf/30 to-bf/5" : "bg-gradient-to-b from-zinc-700/40 to-zinc-800/10"
         }`}
       >
-        <span className={`font-display text-5xl leading-none sm:text-6xl ${m.label}`}>{row.total}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">leads</span>
+        <span className={`font-display text-5xl leading-none sm:text-6xl ${m.label}`}>{row.value}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+          {cofOnly ? (row.value === 1 ? "COF enviada" : "COFs enviadas") : "leads"}
+        </span>
         <span className={`mt-2 rounded-full px-2.5 py-0.5 text-base font-black ${m.bg}`}>{row.position}º</span>
-        <span className="mt-1.5 text-[11px] text-zinc-500">
-          +{row.today} hoje · <b className="text-bf">{row.cof} COF</b> {cofOnly ? "" : ` · ${row.qualified} qualif.`}{row.won > 0 ? ` · ${row.won} venda${row.won > 1 ? "s" : ""}` : ""}
+        <span className="mt-1.5 text-center text-[11px] text-zinc-500">
+          <Details row={row} cofOnly={cofOnly} strong="text-bf" />
         </span>
         {tiedWith ? (
           <span className="mt-0.5 px-1 text-center text-[11px] font-semibold text-sky-200">
@@ -119,10 +140,10 @@ export default function Ranking({
   const leader = rows[0];
   const top = rows.slice(0, 3);
   const rest = rows.slice(3);
-  const max = leader?.total || 1;
-  // primeiro nome de quem tem o mesmo nº de leads (para mostrar o empate)
+  const max = leader?.value || 1;
+  // primeiro nome de quem tem o mesmo valor (para mostrar o empate)
   const tieOf = (i: number) => {
-    const other = rows.find((o, j) => j !== i && o.total === rows[i].total);
+    const other = rows.find((o, j) => j !== i && o.value === rows[i].value);
     return other ? other.name : null;
   };
 
@@ -134,7 +155,9 @@ export default function Ranking({
         </h2>
         {leader && rows[1] && (
           <span className="rounded-full border border-bf/40 bg-bf/10 px-3 py-1 text-xs font-semibold text-bf">
-            {leader.total === rows[1].total ? "EMPATE NA LIDERANÇA!" : `${leader.name.split(" ")[0]} lidera por ${leader.total - rows[1].total}`}
+            {leader.value === rows[1].value
+              ? "EMPATE NA LIDERANÇA!"
+              : `${leader.name.split(" ")[0]} lidera por ${leader.value - rows[1].value}${cofOnly ? (leader.value - rows[1].value === 1 ? " COF" : " COFs") : ""}`}
           </span>
         )}
       </div>
@@ -145,7 +168,11 @@ export default function Ranking({
             {hasColumn ? (
               <>
                 <p className="font-display text-3xl text-bf">PISTA LIVRE!</p>
-                <p className="text-zinc-400">Nenhum lead ainda — o primeiro a cadastrar assume a liderança.</p>
+                <p className="text-zinc-400">
+                  {cofOnly
+                    ? "Nenhuma COF enviada ainda — a primeira assume a liderança."
+                    : "Nenhum lead ainda — o primeiro a cadastrar assume a liderança."}
+                </p>
               </>
             ) : (
               <>
@@ -166,7 +193,7 @@ export default function Ranking({
                 row={r}
                 idx={i}
                 highlight={highlight === r.key}
-                gap={i > 0 ? rows[i - 1].total - r.total + 1 : null}
+                gap={i > 0 ? rows[i - 1].value - r.value + 1 : null}
                 tiedWith={tieOf(i)}
                 cofOnly={cofOnly}
               />
@@ -177,7 +204,7 @@ export default function Ranking({
             <ol className="mt-4 flex flex-col gap-1.5">
               {rest.map((r, i) => {
                 const above = rows[i + 2];
-                const gap = above.total - r.total + 1;
+                const gap = above.value - r.value + 1;
                 const tiedWith = tieOf(i + 3);
                 return (
                   <li
@@ -195,12 +222,12 @@ export default function Ranking({
                         <span className="truncate font-semibold">{r.name}</span>
                         <Tie show={!!tiedWith} />
                         <Delta delta={r.delta} />
-                        <OnFire today={r.today} />
+                        <OnFire today={r.valueToday} />
                       </div>
                       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-800">
                         <div
                           className="animate-bar h-full rounded-full bg-bf/70"
-                          style={{ width: `${(r.total / max) * 100}%` }}
+                          style={{ width: `${(r.value / max) * 100}%` }}
                         />
                       </div>
                       <p className="mt-1 text-[11px] text-zinc-500">
@@ -211,11 +238,10 @@ export default function Ranking({
                             faltam <b className="text-bf">{gap}</b> para passar {above.name.split(" ")[0]}
                           </>
                         )}{" "}
-                        · +{r.today} hoje · <b className="text-zinc-300">{r.cof} COF</b>
-                        {cofOnly ? "" : ` · ${r.qualified} qualif.`}
+                        · <Details row={r} cofOnly={cofOnly} strong="text-zinc-300" />
                       </p>
                     </div>
-                    <span className="font-display text-3xl tabular-nums">{r.total}</span>
+                    <span className="font-display text-3xl tabular-nums">{r.value}</span>
                   </li>
                 );
               })}
