@@ -384,15 +384,23 @@ function Credits({
   const viewport = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const [overflow, setOverflow] = useState(false);
+  // a lista só existe depois do primeiro lead: o observador liga quando ela
+  // aparece (antes ficava preso à tela vazia e a rolagem nunca começava)
+  const hasLeads = leads.length > 0;
   useEffect(() => {
     const v = viewport.current;
     const l = list.current;
-    if (!v || !l) return;
-    const ro = new ResizeObserver(() => setOverflow(l.scrollHeight > v.clientHeight + 4));
+    if (!v || !l) {
+      setOverflow(false);
+      return;
+    }
+    const check = () => setOverflow(l.scrollHeight > v.clientHeight + 4);
+    const ro = new ResizeObserver(check);
     ro.observe(v);
     ro.observe(l);
+    check();
     return () => ro.disconnect();
-  }, []);
+  }, [hasLeads]);
   const known = modelos.filter((m) => m.name !== "A definir");
 
   return (
