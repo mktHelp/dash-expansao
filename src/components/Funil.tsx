@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Crown, Maximize, Volume2, VolumeX } from "lucide-react";
 import { EVENT_AT, POLL_MS } from "@/lib/config";
 import { confettiBurst, fireworksShow, flushPendingVictory, playCelebration, playVictory, preloadVictory } from "@/lib/celebrate";
-import { getAudio, playChaChing, readAudioState, reloadedRecently, serverAudioState, subscribeAudio, useClock } from "@/lib/live";
+import { getAudio, readAudioState, reloadedRecently, serverAudioState, subscribeAudio, useClock } from "@/lib/live";
 import type { FunilLead, FunilPayload } from "@/lib/types";
 import FitStage, { useStaged } from "./FitStage";
 import { TelaoCard } from "./Telao";
@@ -630,7 +630,7 @@ export default function FunilDashboard() {
     if (!soundRef.current) return;
     if (meta) playCelebration(getAudio(), "finale");
     else if (franquia || reserva) playVictory(getAudio());
-    else playChaChing();
+    // lead novo: só o anúncio na tela, sem som
   }, []);
   const { data, error } = useFunil(onAlerts, demo);
   const stats = useMemo(() => (data ? computeFunil(data.leads) : null), [data]);
