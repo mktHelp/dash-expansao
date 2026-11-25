@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import {
   BadgeCheck,
   CalendarDays,
-  ChevronRight,
   Clock,
   Filter,
   Flame,
@@ -12,10 +11,12 @@ import {
   PhoneCall,
   Radio,
   Send,
+  ShieldCheck,
+  Siren,
   Target,
+  Timer,
   TriangleAlert,
   UserCheck,
-  UserX,
   Users,
   Zap,
 } from "lucide-react";
@@ -105,72 +106,60 @@ function MissingColumn({ name }: { name: string }) {
 export function PresenceHero({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
   const pct = Math.min(100, pctOf(stats.presenca, goal));
   const left = Math.max(0, goal - stats.presenca);
-  const marks = [0.25, 0.5, 0.75];
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
-    <div className="panel relative flex h-full flex-col overflow-hidden border-bf/60 p-6 shadow-[0_0_60px_rgba(248,190,25,0.12)]">
+    <div className="panel relative flex h-full flex-col justify-between overflow-hidden border-bf/50 px-8 pb-7 pt-6">
       <div className="absolute inset-x-0 top-0 h-1.5 bg-bf" />
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.3em] text-zinc-300">
-            <UserCheck size={18} className="text-bf" /> Meta da Black · Presenças confirmadas
-          </p>
-          <p className="mt-1 flex items-baseline gap-4 font-display leading-[0.85]">
-            <span className="glow-text text-[11rem] tabular-nums text-bf">{columns.presenca ? fmt(stats.presenca) : "—"}</span>
-            <span className="text-7xl text-zinc-500">/ {fmt(goal)}</span>
-          </p>
-        </div>
-        {left > 0 && stats.daysLeft > 0 && (
-          <div className="rounded-2xl border border-bf/40 bg-bf/10 px-6 py-4 text-right">
-            <p className="flex items-center justify-end gap-1.5 text-xs font-bold uppercase tracking-[0.3em] text-bf">
-              <Zap size={14} /> Ritmo necessário
-            </p>
-            <p className="font-display leading-none text-white">
-              <span className="text-[6.5rem] tabular-nums">{fmt(stats.dailyNeed)}</span>
-              <span className="ml-2 text-4xl text-zinc-400">/dia</span>
-            </p>
-            <p className="text-sm font-semibold text-zinc-300">
-              {stats.daysLeft === 1 ? <b className="text-bf">ÚLTIMO DIA!</b> : `${stats.daysLeft} dias até o evento`}
-            </p>
-          </div>
-        )}
+      <div className="pointer-events-none absolute -left-32 -top-40 size-[34rem] rounded-full bg-bf/10 blur-3xl" />
+
+      <div className="relative flex items-center justify-between">
+        <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.3em] text-zinc-300">
+          <UserCheck size={18} className="text-bf" /> Meta da Black · Presenças confirmadas
+        </p>
+        <span className="rounded-full border border-bf/40 bg-bf/10 px-4 py-1 font-display text-2xl tracking-wide text-bf">
+          {pct}% DA META
+        </span>
       </div>
 
-      <div className="relative mt-4">
-        <div className="h-11 overflow-hidden rounded-full bg-zinc-800 ring-1 ring-bf/30">
-          {/* wrapper separado: a barra cresce (animate-bar) e as listras correm (hazard) */}
+      <div className="relative flex items-end justify-between">
+        <p className="flex items-baseline gap-4 font-display leading-[0.8]">
+          <span className="glow-text text-[13rem] tabular-nums text-bf">{columns.presenca ? fmt(stats.presenca) : "—"}</span>
+          <span className="text-7xl text-zinc-600">/ {fmt(goal)}</span>
+        </p>
+        <div className="pb-2 text-right">
+          {!columns.presenca ? (
+            <MissingColumn name="Presença Confirmada" />
+          ) : left === 0 ? (
+            <p className="font-display text-6xl text-bf">META BATIDA! 🎉</p>
+          ) : (
+            <>
+              <p className="text-sm font-bold uppercase tracking-[0.35em] text-zinc-400">faltam</p>
+              <p className="font-display text-[7.5rem] leading-[0.85] tabular-nums text-white">{fmt(left)}</p>
+              <p className="text-sm font-bold uppercase tracking-[0.35em] text-zinc-400">presenças</p>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="relative">
+        <div className="h-5 overflow-hidden rounded-full bg-zinc-800/80">
           <div className="animate-bar h-full" style={{ width: `${pct}%` }}>
-            <div className="hazard h-full rounded-full shadow-[0_0_30px_rgba(248,190,25,0.6)]" />
+            <div className="bar-sheen h-full rounded-full bg-gradient-to-r from-amber-500 via-bf to-bf-soft shadow-[0_0_28px_rgba(248,190,25,0.7)]" />
           </div>
         </div>
-        {marks.map((m) => (
-          <div key={m} className="absolute top-0 h-11" style={{ left: `${m * 100}%` }}>
-            <div className="h-full w-0.5 bg-zinc-950/70" />
-            <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 text-xs font-bold tabular-nums text-zinc-500">
-              {fmt(Math.round(goal * m))}
+        <div className="relative mt-2 h-4">
+          {ticks.map((t) => (
+            <span
+              key={t}
+              className={`absolute text-xs font-bold tabular-nums ${
+                stats.presenca >= goal * t ? "text-bf" : "text-zinc-600"
+              } ${t === 0 ? "" : t === 1 ? "-translate-x-full" : "-translate-x-1/2"}`}
+              style={{ left: `${t * 100}%` }}
+            >
+              {fmt(Math.round(goal * t))}
             </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-auto flex flex-wrap items-baseline gap-x-8 gap-y-2 pt-6 text-lg text-zinc-300">
-        {!columns.presenca ? (
-          <MissingColumn name="Presença Confirmada" />
-        ) : left === 0 ? (
-          <span className="font-display text-4xl text-bf">META BATIDA! 🎉</span>
-        ) : (
-          <span className="flex items-baseline gap-2">
-            faltam <b className="font-display text-6xl leading-none text-bf">{fmt(left)}</b>
-            <span className="font-display text-3xl tracking-wide text-white">PRESENÇAS</span>
-          </span>
-        )}
-        <span className="flex items-baseline gap-2">
-          <b className="font-display text-5xl leading-none text-white">{pct}%</b> da meta
-        </span>
-        <span className="flex items-baseline gap-2">
-          <Send size={18} className="self-center text-sky-300" />
-          <b className="font-display text-4xl leading-none text-sky-300">{pctOf(stats.presenca, stats.convite)}%</b>
-          dos convidados confirmaram
-        </span>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -209,88 +198,91 @@ export function HotQueue({ stats, goal, columns }: { stats: Stats; goal: number;
   );
 }
 
-// ---------------- Funil de conversão: COF → convite → presença ----------------
-function FunnelStep({
+// ---------------- Funil de conversão em setas: COF → convite → presença ----------------
+function Arrow({
+  shape,
+  className,
   icon,
   label,
   value,
   note,
-  color,
-  border,
-  big,
+  valueClass,
 }: {
+  shape: "first" | "mid" | "last";
+  className: string;
   icon: React.ReactNode;
   label: string;
-  value: number;
+  value: React.ReactNode;
   note: React.ReactNode;
-  color: string;
-  border: string;
-  big?: boolean;
+  valueClass: string;
 }) {
+  // folga à direita para o selo de % que fica na ponta da seta
+  const pad = shape === "first" ? "pl-7 pr-28" : shape === "mid" ? "pl-16 pr-28" : "pl-16 pr-8";
   return (
-    <div className={`flex min-w-0 flex-1 items-center gap-4 rounded-xl border bg-zinc-900/70 px-5 py-2 ${border}`}>
+    <div className={`arrow-${shape} flex min-w-0 flex-1 items-center gap-4 ${shape === "first" ? "" : "-ml-7"} ${pad} ${className}`}>
       <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">
+        <p className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.25em]">
           {icon} {label}
         </p>
-        <p className="mt-0.5 text-sm text-zinc-400">{note}</p>
+        <p className="mt-1 truncate text-sm font-semibold opacity-80">{note}</p>
       </div>
-      <span className={`ml-auto font-display leading-none tabular-nums ${big ? "text-7xl" : "text-6xl"} ${color}`}>{fmt(value)}</span>
+      <span className={`ml-auto font-display text-[5.5rem] leading-none tabular-nums ${valueClass}`}>{value}</span>
     </div>
   );
 }
 
-function Rate({ value, label }: { value: number; label: string }) {
+function RateBadge({ value, label, left }: { value: number; label: string; left: string }) {
   return (
-    <div className="flex shrink-0 flex-col items-center px-1">
-      <span className="font-display text-3xl leading-none text-white">{value}%</span>
-      <ChevronRight size={28} className="-my-1 text-bf" strokeWidth={3} />
-      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{label}</span>
+    <div
+      className="absolute top-1/2 z-10 grid size-[5.5rem] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-ink bg-zinc-950 text-center shadow-[0_0_0_2px_rgba(248,190,25,0.6),0_8px_30px_rgba(0,0,0,0.6)]"
+      style={{ left }}
+    >
+      <div>
+        <p className="font-display text-3xl leading-none text-white">{value}%</p>
+        <p className="text-[9px] font-black uppercase tracking-widest text-bf">{label}</p>
+      </div>
     </div>
   );
 }
 
 export function ConversionFunnel({ stats, columns }: { stats: Stats; columns: LeadsPayload["columns"] }) {
   return (
-    <div className="panel flex items-stretch gap-3 p-3">
-      <FunnelStep
-        icon={<FileCheck2 size={14} className="text-zinc-300" />}
+    <div className="relative flex h-[7.5rem] shrink-0 items-stretch">
+      <Arrow
+        shape="first"
+        className="bg-gradient-to-r from-zinc-800 to-zinc-700 text-zinc-200"
+        icon={<FileCheck2 size={14} />}
         label="COFs enviadas"
-        value={stats.cof}
-        note={<>base · <b className="text-white">100%</b></>}
-        color="text-white"
-        border="border-line"
+        value={fmt(stats.cof)}
+        note="base · 100%"
+        valueClass="text-white"
       />
-      <Rate value={pctOf(stats.convite, stats.cof)} label="convidados" />
-      <FunnelStep
-        icon={<Send size={14} className="text-sky-300" />}
+      <Arrow
+        shape="mid"
+        className="bg-gradient-to-r from-sky-900 to-sky-700 text-sky-100"
+        icon={<Send size={14} />}
         label="Convites enviados"
-        value={columns.convite ? stats.convite : 0}
+        value={columns.convite ? fmt(stats.convite) : "—"}
         note={
-          columns.convite ? (
-            <>{stats.semConvite > 0 ? `${plural(stats.semConvite, "COF", "COFs")} sem convite` : "todas as COFs convidadas"}</>
-          ) : (
-            <MissingColumn name="Convite Enviado" />
-          )
+          stats.semConvite > 0 ? `${plural(stats.semConvite, "COF", "COFs")} sem convite` : "todas as COFs convidadas"
         }
-        color="text-sky-300"
-        border="border-sky-400/40"
+        valueClass="text-white"
       />
-      <Rate value={pctOf(stats.presenca, stats.convite)} label="confirmam" />
-      <FunnelStep
-        icon={<UserCheck size={14} className="text-bf" />}
-        label="Presenças"
-        value={stats.presenca}
+      <Arrow
+        shape="last"
+        className="bg-gradient-to-r from-amber-500 to-bf text-ink"
+        icon={<UserCheck size={14} />}
+        label="Presenças confirmadas"
+        value={fmt(stats.presenca)}
         note={
           <>
-            <b className="text-white">{pctOf(stats.presenca, stats.cof)}%</b> das COFs ·{" "}
-            <UserX size={12} className="mb-0.5 inline text-zinc-500" /> {plural(stats.recusas, "recusa", "recusas")}
+            {pctOf(stats.presenca, stats.cof)}% das COFs · {plural(stats.recusas, "recusa", "recusas")}
           </>
         }
-        color="text-bf glow-text"
-        border="border-bf/60"
-        big
+        valueClass="text-ink"
       />
+      <RateBadge value={pctOf(stats.convite, stats.cof)} label="convidados" left="calc(33.333% - 6px)" />
+      <RateBadge value={pctOf(stats.presenca, stats.convite)} label="confirmam" left="calc(66.666% - 14px)" />
     </div>
   );
 }
@@ -300,8 +292,8 @@ export function FollowUpQueue({ rows, className = "" }: { rows: Stats["presencaR
   const list = [...rows].filter((r) => r.convite > 0).sort((a, b) => b.aguardando - a.aguardando);
   const max = Math.max(1, ...list.map((r) => r.aguardando));
   return (
-    <div className={`panel p-5 ${className}`}>
-      <h2 className="mb-3 flex items-center justify-between gap-2 font-display text-2xl tracking-wide">
+    <div className={`panel px-5 py-4 ${className}`}>
+      <h2 className="mb-2 flex items-center justify-between gap-2 font-display text-2xl tracking-wide">
         <span className="flex items-center gap-2">
           <PhoneCall size={20} className="text-red-400" /> FILA DE FOLLOW-UP
         </span>
@@ -310,16 +302,16 @@ export function FollowUpQueue({ rows, className = "" }: { rows: Stats["presencaR
       {list.length === 0 ? (
         <p className="text-sm text-zinc-500">Ninguém com convite enviado ainda.</p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-2">
           {list.map((r) => (
             <li key={r.key}>
               <div className="flex items-baseline justify-between">
                 <span className="text-base font-bold">{r.name}</span>
                 <span className="text-sm text-zinc-400">
-                  <b className="font-display text-3xl text-red-400">{fmt(r.aguardando)}</b> na fila
+                  <b className="font-display text-2xl text-red-400">{fmt(r.aguardando)}</b> na fila
                 </span>
               </div>
-              <div className="mt-1 h-3 overflow-hidden rounded-full bg-zinc-800">
+              <div className="mt-0.5 h-2.5 overflow-hidden rounded-full bg-zinc-800">
                 <div
                   className="animate-bar h-full rounded-full bg-gradient-to-r from-red-600 to-orange-400"
                   style={{ width: `${(r.aguardando / max) * 100}%` }}
@@ -333,38 +325,107 @@ export function FollowUpQueue({ rows, className = "" }: { rows: Stats["presencaR
   );
 }
 
-// ---------------- Presenças confirmadas (lista) ----------------
-export function ConfirmedList({ leads, className = "" }: { leads: Lead[]; className?: string }) {
+// ---------------- Relógio da pressão: há quanto tempo não entra presença/convite novo ----------------
+export type Idle = {
+  presenca: { minutes: number; max: number; at: number };
+  convite: { minutes: number; max: number; at: number };
+  working: boolean; // dentro do expediente? (fora dele o relógio pausa)
+};
+
+const clock = (ts: number) =>
+  new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(ts);
+
+/** "agora" · "há 3 min" · "há 1h12" */
+const minutesLabel = (m: number) => (m < 1 ? "agora" : m < 60 ? `há ${m} min` : `há ${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`);
+
+function ClockRow({
+  icon,
+  label,
+  minutes,
+  threshold,
+  record,
+  at,
+  big,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  minutes: number;
+  threshold: number;
+  record: number;
+  at: number;
+  big?: boolean;
+}) {
+  const ratio = Math.min(1, minutes / threshold);
+  const late = minutes >= threshold;
+  const color = late ? "text-red-400" : ratio >= 0.6 ? "text-amber-300" : "text-emerald-400";
+  const bar = late ? "bg-red-500" : ratio >= 0.6 ? "bg-amber-400" : "bg-emerald-400";
   return (
-    <div className={`panel overflow-hidden p-5 ${className}`}>
-      <h2 className="mb-2 flex items-center gap-2 font-display text-2xl tracking-wide">
-        <BadgeCheck size={20} className="text-bf" /> CONFIRMADOS
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">
+          {icon} {label}
+        </span>
+        <span className={`font-display leading-none tabular-nums ${big ? "text-4xl" : "text-2xl"} ${color} ${late ? "animate-pulse" : ""}`}>
+          {minutesLabel(minutes)}
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div className={`h-full rounded-full transition-all duration-1000 ${bar}`} style={{ width: `${Math.max(3, ratio * 100)}%` }} />
+      </div>
+      <p className="mt-0.5 text-[11px] text-zinc-500">
+        recorde <b className="text-zinc-300">{fmt(record)}</b> · batido às {clock(at)} · alerta em {threshold} min
+      </p>
+    </div>
+  );
+}
+
+export function PressureClock({
+  idle,
+  thresholds,
+  className = "",
+}: {
+  idle: Idle | null;
+  thresholds: { presenca: number; convite: number };
+  className?: string;
+}) {
+  return (
+    <div className={`panel flex flex-col px-5 py-4 ${className}`}>
+      <h2 className="mb-2 flex items-center justify-between gap-2 font-display text-2xl tracking-wide">
+        <span className="flex items-center gap-2">
+          <Timer size={20} className="text-bf" /> RELÓGIO DA PRESSÃO
+        </span>
+        {idle && !idle.working && (
+          <span className="font-sans text-xs font-semibold normal-case tracking-normal text-zinc-500">
+            fora do expediente · pausado
+          </span>
+        )}
       </h2>
-      {leads.length === 0 ? (
-        <p className="text-sm text-zinc-500">A primeira presença confirmada aparece aqui.</p>
+      {!idle ? (
+        <p className="text-sm text-zinc-500">Começa a contar na primeira leitura da planilha.</p>
       ) : (
-        <ul className="divide-y divide-line">
-          {leads.map((l) => (
-            <li key={l.id} className="flex items-center justify-between gap-3 py-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">
-                  {l.nome}
-                  <span className="font-normal text-zinc-500"> · {[l.cidade, l.uf].filter(Boolean).join("/") || "—"}</span>
-                </p>
-                <p className="truncate text-xs text-zinc-400">
-                  {l.vendedor ? (
-                    <>
-                      por <b className="text-bf">{l.vendedor}</b>
-                    </>
-                  ) : (
-                    <span className="text-amber-400">Sem Responsável</span>
-                  )}
-                </p>
-              </div>
-              <UserCheck size={16} className="shrink-0 text-bf" />
-            </li>
-          ))}
-        </ul>
+        <div className="flex min-h-0 flex-1 flex-col justify-between gap-2">
+          <ClockRow
+            icon={<UserCheck size={13} className="text-bf" />}
+            label="Última presença nova"
+            minutes={idle.presenca.minutes}
+            threshold={thresholds.presenca}
+            record={idle.presenca.max}
+            at={idle.presenca.at}
+            big
+          />
+          <ClockRow
+            icon={<Send size={13} className="text-sky-300" />}
+            label="Último convite novo"
+            minutes={idle.convite.minutes}
+            threshold={thresholds.convite}
+            record={idle.convite.max}
+            at={idle.convite.at}
+          />
+          <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+            <ShieldCheck size={13} className="shrink-0 text-zinc-400" />
+            só zera acima do recorde · desmarcar e marcar não conta
+          </p>
+        </div>
       )}
     </div>
   );
@@ -714,6 +775,65 @@ export function MilestoneToast({ value, goal, onDone }: { value: number; goal: n
             </p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Alarme: minutos sem presença confirmada nova ----------------
+/** Faixa vermelha que cresce com o tempo: de um aviso a um alarme que toma a tela (~30 min). */
+export function PresenceIdleAlert({ minutes, threshold, since, now }: { minutes: number; threshold: number; since: number; now: number }) {
+  const e = Math.min(1, Math.max(0, (minutes - threshold) / 25)); // 0 → 1 em 25 min
+  const sameDay = dayKey(since) === dayKey(now);
+  return (
+    <>
+      {/* vinheta vermelha nas bordas, mais forte quanto mais tempo passa */}
+      <div
+        className="alarm-vignette pointer-events-none fixed inset-0 z-40"
+        style={{
+          boxShadow: `inset 0 0 ${140 + 220 * e}px ${20 + 90 * e}px rgba(220, 38, 38, ${0.3 + 0.45 * e})`,
+          animationDuration: `${2 - 1.2 * e}s`,
+        }}
+      />
+      <div
+        className="pointer-events-none fixed bottom-8 left-1/2 z-40 -translate-x-1/2 transition-[width] duration-1000"
+        style={{ width: `${52 + 44 * e}%` }}
+      >
+        <div
+          className="alarm-box rounded-3xl border-4 border-red-300 bg-gradient-to-b from-red-600 to-red-800 px-8 text-center text-white"
+          style={{ animationDuration: `${1.6 - 0.9 * e}s`, paddingBlock: `${1 + 1.5 * e}rem` }}
+        >
+          <p
+            className="flex items-center justify-center gap-4 font-display leading-none tracking-wide"
+            style={{ fontSize: `${3.2 + 4.3 * e}rem` }}
+          >
+            <Siren className="animate-ring shrink-0" style={{ width: "0.9em", height: "0.9em" }} />
+            ATENÇÃO! {fmt(minutes)} MINUTOS
+          </p>
+          <p className="mt-1 font-display leading-none tracking-wide" style={{ fontSize: `${2 + 2.4 * e}rem` }}>
+            SEM NOVA PRESENÇA CONFIRMADA!
+          </p>
+          <p className="mt-2 text-lg font-bold uppercase tracking-[0.25em] text-red-100">
+            última às {clock(since)}
+            {sameDay ? "" : " de ontem"} · liga pra fila agora
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Versão menor, para convites: pílula laranja no topo que cresce um pouco. */
+export function InviteIdleAlert({ minutes, threshold }: { minutes: number; threshold: number }) {
+  const e = Math.min(1, Math.max(0, (minutes - threshold) / 25));
+  return (
+    <div className="pointer-events-none fixed left-1/2 top-[100px] z-40 -translate-x-1/2">
+      <div
+        className="alarm-pill flex items-center gap-2 whitespace-nowrap rounded-full border-2 border-orange-300 bg-orange-600 px-5 py-1 font-display tracking-wide text-white"
+        style={{ fontSize: `${1.4 + 0.9 * e}rem` }}
+      >
+        <TriangleAlert className="shrink-0" style={{ width: "1em", height: "1em" }} />
+        {fmt(minutes)} MIN SEM NOVO CONVITE ENVIADO
       </div>
     </div>
   );

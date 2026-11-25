@@ -44,8 +44,6 @@ export type Stats = {
   aguardando: number; // convidados sem resposta (nem sim, nem não)
   recusas: number; // convidados com Presença Confirmada = Não
   semConvite: number; // COFs que não receberam convite
-  daysLeft: number; // dias até o evento, contando hoje (0 = já passou)
-  dailyNeed: number; // presenças por dia para bater a meta até o evento
   unassigned: number; // leads sem Responsável
   ranking: RankRow[]; // por leads cadastrados (painel completo)
   presencaRanking: RankRow[]; // por presenças confirmadas (tela da campanha)
@@ -54,13 +52,12 @@ export type Stats = {
   monthly: { month: string; count: number }[]; // "AAAA-MM"
   states: { uf: string; count: number }[];
   recent: Lead[];
-  confirmed: Lead[]; // presenças confirmadas, mais recentes primeiro
 };
 
 const inc = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
 const byRecent = (a: Lead, b: Lead) => (b.ts ?? -Infinity) - (a.ts ?? -Infinity) || b.row - a.row;
 
-export function computeStats(all: Lead[], now: number, goal = 0): Stats {
+export function computeStats(all: Lead[], now: number): Stats {
   // todo o período da planilha (não só a campanha)
   const leads = all;
   const todayKey = dayKey(now);
@@ -210,13 +207,6 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     }
   }
 
-  // ritmo: o que falta da meta dividido pelos dias até o evento, contando hoje
-  const eventDay = dayKey(EVENT_AT);
-  const daysLeft =
-    todayKey > eventDay ? 0 : Math.round((Date.parse(eventDay) - Date.parse(todayKey)) / DAY) + 1;
-  const left = Math.max(0, goal - presenca);
-  const dailyNeed = daysLeft > 0 ? Math.ceil(left / daysLeft) : 0;
-
   return {
     total: leads.length,
     today,
@@ -230,8 +220,6 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     aguardando,
     recusas,
     semConvite,
-    daysLeft,
-    dailyNeed,
     unassigned,
     ranking,
     presencaRanking,
@@ -240,7 +228,6 @@ export function computeStats(all: Lead[], now: number, goal = 0): Stats {
     monthly,
     states: [...ufCount.entries()].map(([uf, count]) => ({ uf, count })).sort((a, b) => b.count - a.count),
     recent: [...leads].sort(byRecent).slice(0, 8),
-    confirmed: leads.filter((l) => l.presenca).sort(byRecent).slice(0, 8),
   };
 }
 

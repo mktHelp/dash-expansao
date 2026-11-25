@@ -106,6 +106,37 @@ body {
 }
 .animate-ring { animation: ring 1.6s ease-in-out infinite; transform-origin: 50% 50%; }
 
+/* funil em setas (COF → convite → presença) */
+.arrow-first { clip-path: polygon(0 0, calc(100% - 44px) 0, 100% 50%, calc(100% - 44px) 100%, 0 100%); border-radius: 1rem 0 0 1rem; }
+.arrow-mid { clip-path: polygon(0 0, calc(100% - 44px) 0, 100% 50%, calc(100% - 44px) 100%, 0 100%, 44px 50%); }
+.arrow-last { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 44px 50%); border-radius: 0 1rem 1rem 0; }
+
+/* brilho que corre na barra da meta */
+.bar-sheen { position: relative; overflow: hidden; }
+.bar-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 0.55) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: sheen 2.8s ease-in-out infinite;
+}
+@keyframes sheen { 60%, 100% { transform: translateX(100%); } }
+
+/* alarme de inatividade (a duração da animação encurta conforme o tempo passa) */
+@keyframes alarm-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgb(239 68 68 / 0.6); }
+  50% { transform: scale(1.025); box-shadow: 0 0 110px rgb(239 68 68 / 0.95); }
+}
+.alarm-box { animation: alarm-pulse 1.6s ease-in-out infinite; }
+@keyframes alarm-fade { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.alarm-vignette { animation: alarm-fade 2s ease-in-out infinite; }
+@keyframes pill-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(251 146 60 / 0.6); }
+  50% { box-shadow: 0 0 0 8px rgb(251 146 60 / 0); }
+}
+.alarm-pill { animation: pill-pulse 1.4s ease-out infinite; }
+
 /* mouse parado: some o cursor e os botões (só ficam as informações) */
 html.idle,
 html.idle * {
@@ -121,7 +152,7 @@ html.idle .idle-hide {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-toast, .animate-flash, .animate-bar, .animate-rise { animation-duration: 0.01s; }
-  .hazard, .hot-panel, .animate-ring { animation: none; }
+  .hazard, .hot-panel, .animate-ring, .alarm-box, .alarm-vignette, .alarm-pill, .bar-sheen::after { animation: none; }
 }
 
 /* ============ Grande final (meta de 200) e modo campeão ============ */

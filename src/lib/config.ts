@@ -7,8 +7,7 @@ export const CAMPAIGN_START = new Date(
   process.env.NEXT_PUBLIC_CAMPAIGN_START ?? "2026-11-05T00:00:00-03:00",
 ).getTime();
 
-// EVENT_AT = data e hora do evento: a contagem regressiva e o ritmo de
-// presenças por dia ("faltam X ÷ dias até o evento") usam esta data.
+// EVENT_AT = data e hora do evento: usada pela contagem regressiva.
 export const EVENT_AT = new Date(
   process.env.NEXT_PUBLIC_EVENT_AT ?? "2026-11-27T19:00:00-03:00",
 ).getTime();
@@ -48,3 +47,16 @@ export const LOST_STAGE = "Venda Perdida";
 export const POLL_MS = 15_000;
 
 export const TIMEZONE = "America/Sao_Paulo";
+
+// ---- Alarme de inatividade ----
+// Minutos sem presença confirmada NOVA (ou convite novo) até o alerta vermelho aparecer.
+export const ALERT_PRESENCA_MIN = Number(process.env.NEXT_PUBLIC_ALERTA_PRESENCA_MIN ?? 5) || 5;
+export const ALERT_CONVITE_MIN = Number(process.env.NEXT_PUBLIC_ALERTA_CONVITE_MIN ?? 5) || 5;
+// Expediente: o relógio só corre nesse horário (Brasília) e nesses dias
+// (0 = domingo … 6 = sábado). Fora dele o alarme some e o relógio pausa,
+// para a TV não amanhecer mostrando "840 minutos sem presença".
+export const WORK_HOURS = process.env.NEXT_PUBLIC_EXPEDIENTE ?? "08:00-18:00";
+export const WORK_DAYS = (process.env.NEXT_PUBLIC_DIAS_EXPEDIENTE ?? "1,2,3,4,5")
+  .split(",")
+  .map((d) => Number(d.trim()))
+  .filter((d) => d >= 0 && d <= 6);

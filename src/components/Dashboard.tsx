@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Maximize, Volume2, VolumeX } from "lucide-react";
-import { POLL_MS } from "@/lib/config";
+import { ALERT_CONVITE_MIN, ALERT_PRESENCA_MIN, POLL_MS } from "@/lib/config";
 import { norm } from "@/lib/normalize";
 import {
   confettiBurst,
@@ -16,24 +16,28 @@ import {
 } from "@/lib/celebrate";
 import { computeStats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
+import { bump, isWorkTime, loadWatch, saveWatch, workMinutes, type Watch } from "@/lib/watch";
 import FitStage, { useStaged } from "./FitStage";
 import { ChampionHero, FinaleOverlay, mvpOf, type Mvp } from "./Finale";
 import Ranking from "./Ranking";
 import {
-  ConfirmedList,
   ConversionFunnel,
   Countdown,
   Feed,
   FollowUpQueue,
   Funnel,
   HotQueue,
+  InviteIdleAlert,
   Kpis,
   LiveBadge,
   MilestoneToast,
   MonthlyChart,
   NewLeadToast,
   PresenceHero,
+  PresenceIdleAlert,
+  PressureClock,
   States,
+  type Idle,
   type ToastKind,
 } from "./Panels";
 
@@ -79,6 +83,28 @@ function playChaChing() {
     o.start(t);
     o.stop(t + 0.4);
   });
+}
+
+// sirene curta do alarme de inatividade (sobe e desce 3 vezes)
+function playSiren() {
+  const ctx = getAudio();
+  if (!ctx) return;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = "sawtooth";
+  const t = ctx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    o.frequency.setValueAtTime(620, t + i * 0.6);
+    o.frequency.linearRampToValueAtTime(1050, t + i * 0.6 + 0.3);
+    o.frequency.linearRampToValueAtTime(620, t + i * 0.6 + 0.6);
+  }
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
+  g.gain.setValueAtTime(0.12, t + 1.7);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.85);
+  o.connect(g).connect(ctx.destination);
+  o.start(t);
+  o.stop(t + 1.9);
 }
 
 const noopSubscribe = () => () => {};
@@ -127,8 +153,9 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const known = useRef<{ leads: Set<string>; convite: Set<string>; presenca: Set<string> } | null>(null);
   // versão do deploy vista na 1ª leitura; se mudar, recarrega a página sozinho
   const build = useRef<string | null>(null);
-  // presenças na leitura anterior (para os marcos e a grande final só na virada)
-  const lastPresenca = useRef<number | null>(null);
+  // recordes de presenças e convites (relógio de inatividade, marcos e grande final)
+  const watchRef = useRef<Watch | null | undefined>(undefined);
+  const [watch, setWatch] = useState<Watch | null>(null);
   const onAlertsRef = useRef(onAlerts);
   useEffect(() => {
     onAlertsRef.current = onAlerts;
@@ -154,10 +181,24 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
         }
         const owned = payload.leads.filter((l) => l.vendedor);
         const goal = payload.goal;
-        const st = computeStats(payload.leads, Date.now(), goal);
+        const now = Date.now();
+        const st = computeStats(payload.leads, now);
 
-        // meta batida (grande final) ou marco cruzado — só na virada, nunca na 1ª leitura
-        const prev = lastPresenca.current;
+        // recorde: só um total MAIOR que o maior já visto conta como novo.
+        // Desmarcar e marcar de novo volta ao mesmo número — não zera o relógio
+        // nem repete marco ou grande final.
+        if (watchRef.current === undefined) watchRef.current = loadWatch();
+        const old = watchRef.current;
+        const next: Watch = {
+          presenca: bump(old?.presenca, st.presenca, now),
+          convite: bump(old?.convite, st.convite, now),
+        };
+        watchRef.current = next;
+        saveWatch(next);
+        setWatch(next);
+
+        // meta batida (grande final) ou marco cruzado — só quando passa do recorde anterior
+        const prev = old?.presenca.max;
         const bigAlerts: Alert[] = [];
         if (prev != null && goal > 0 && st.presenca > prev) {
           if (prev < goal && st.presenca >= goal) {
@@ -167,7 +208,6 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
             if (crossed.length) bigAlerts.push({ kind: "milestone", value: crossed[crossed.length - 1], goal });
           }
         }
-        lastPresenca.current = st.presenca;
 
         if (!known.current) {
           // primeira leitura: tudo que já existe conta como "visto"
@@ -212,7 +252,7 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
     };
   }, []);
 
-  return { data, error };
+  return { data, error, watch };
 }
 
 /** variant "simple" = campanha (direto ao ponto); "full" = visão completa (/completo). */
@@ -268,9 +308,11 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
   const simRef = useRef<{ presenca: number; goal: number; mvp: Mvp }>({ presenca: 0, goal: 100, mvp: null });
   // simulação da grande final: força o "modo campeão" sem mexer na planilha
   const [forceChampion, setForceChampion] = useState(false);
+  // simulação do alarme: minutos "sem presença" somados ao relógio real (tecla I = +5)
+  const [simIdle, setSimIdle] = useState(0);
 
-  // ---- modo de teste: ?simular=true (ou presenca | convite | lead | marco | meta) ----
-  // dispara o alerta 3s após abrir; depois, teclas P, C, L, M, G e R
+  // ---- modo de teste: ?simular=true (ou presenca | convite | lead | marco | meta | inatividade) ----
+  // dispara o alerta 3s após abrir; depois, teclas P, C, L, M, G, I e R
   const sim = useSyncExternalStore(noopSubscribe, readSimParam, () => null);
   const audioState = useSyncExternalStore(subscribeAudio, readAudioState, serverAudioState);
   const soundBlocked = sound && audioState !== "running";
@@ -298,7 +340,8 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
     const first: SimKind =
       sim === "convite" ? "convite" : sim === "lead" ? "lead" : sim === "marco" ? "milestone"
         : sim === "meta" || sim === "final" || sim === "campeao" ? "goal" : "presenca";
-    const t = setTimeout(() => fire(first), 3000);
+    const idleStart = Number(new URLSearchParams(window.location.search).get("minutos") ?? 6) || 6;
+    const t = setTimeout(() => (sim === "inatividade" ? setSimIdle(idleStart) : fire(first)), 3000);
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (k === "p") fire("presenca");
@@ -306,7 +349,11 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       else if (k === "l") fire("lead");
       else if (k === "m") fire("milestone");
       else if (k === "g") fire("goal");
-      else if (k === "r") setForceChampion(false);
+      else if (k === "i") setSimIdle((m) => m + 5);
+      else if (k === "r") {
+        setForceChampion(false);
+        setSimIdle(0);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -317,17 +364,41 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
 
   const dismissToast = useCallback(() => setQueue((q) => q.slice(1)), []);
 
-  const { data, error } = useLeads(onAlerts);
+  const { data, error, watch } = useLeads(onAlerts);
 
   // recalcula estatísticas a cada minuto (ou quando chegam dados)
   const minute = Math.floor(now / 60_000) * 60_000;
   const stats = useMemo(
-    () => (data && minute ? computeStats(data.leads, minute, data.goal) : null),
+    () => (data && minute ? computeStats(data.leads, minute) : null),
     [data, minute],
   );
   useEffect(() => {
     if (stats && data) simRef.current = { presenca: stats.presenca, goal: data.goal, mvp: mvpOf(stats.presencaRanking) };
   }, [stats, data]);
+
+  // relógio de inatividade: minutos de expediente desde o último recorde
+  const pressure: Idle | null = useMemo(() => {
+    if (!watch || !now) return null;
+    const extra = simIdle * 60_000;
+    const minutes = (at: number) => (simIdle > 0 ? Math.floor((now - at + extra) / 60_000) : workMinutes(at, now));
+    return {
+      presenca: { ...watch.presenca, minutes: minutes(watch.presenca.at) },
+      convite: { ...watch.convite, minutes: minutes(watch.convite.at) },
+      working: simIdle > 0 || isWorkTime(now),
+    };
+  }, [watch, now, simIdle]);
+  // alarmes só na tela da TV, no expediente e com a planilha respondendo
+  const showAlarms = variant === "simple" && !!pressure?.working && !error;
+  const presencaLate = showAlarms && pressure!.presenca.minutes >= ALERT_PRESENCA_MIN;
+  const conviteLate = showAlarms && pressure!.convite.minutes >= ALERT_CONVITE_MIN;
+
+  // sirene ao entrar no alarme e a cada 5 min a mais sem presença nova
+  const sirenStep = presencaLate ? Math.floor((pressure!.presenca.minutes - ALERT_PRESENCA_MIN) / 5) : -1;
+  const lastSiren = useRef(-1);
+  useEffect(() => {
+    if (sirenStep > lastSiren.current && soundRef.current) playSiren();
+    lastSiren.current = sirenStep;
+  }, [sirenStep]);
 
   // modo campeão: meta de presenças batida (ou simulada) → tema dourado + brilho caindo
   const champion = !!(stats && data && (stats.presenca >= data.goal || forceChampion));
@@ -386,9 +457,13 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       )}
       {sim && (
         <div className="fixed bottom-3 left-3 z-40 rounded-full border border-sky-400/50 bg-sky-500/15 px-3 py-1 text-xs font-semibold text-sky-200">
-          MODO SIMULAÇÃO · P = presença · C = convite · L = lead · M = marco · G = meta batida · R = sair do modo campeão
+          MODO SIMULAÇÃO · P = presença · C = convite · L = lead · M = marco · G = meta batida · I = +5 min sem presença · R = resetar
         </div>
       )}
+      {presencaLate && (
+        <PresenceIdleAlert minutes={pressure!.presenca.minutes} threshold={ALERT_PRESENCA_MIN} since={pressure!.presenca.at} now={now} />
+      )}
+      {conviteLate && <InviteIdleAlert minutes={pressure!.convite.minutes} threshold={ALERT_CONVITE_MIN} />}
       {finale && <FinaleOverlay key={finale.value} value={finale.value} goal={finale.goal} mvp={finale.mvp} onDone={dismissFinale} />}
       {current && (
         current.kind === "milestone" ? (
@@ -468,7 +543,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       ) : variant === "simple" ? (
         <>
           {champion ? (
-            <div className={stage ? "h-[390px] shrink-0" : ""}>
+            <div className={stage ? "h-[370px] shrink-0" : ""}>
               <ChampionHero
                 stats={forceChampion ? { ...stats, presenca: Math.max(stats.presenca, data!.goal) } : stats}
                 goal={data!.goal}
@@ -476,7 +551,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
               />
             </div>
           ) : (
-            <div className={stage ? "grid h-[390px] shrink-0 grid-cols-12 gap-4" : "grid gap-4 xl:grid-cols-12"}>
+            <div className={stage ? "grid h-[370px] shrink-0 grid-cols-12 gap-4" : "grid gap-4 xl:grid-cols-12"}>
               <section className={stage ? "col-span-8 min-h-0" : "min-w-0 xl:col-span-8"}>
                 <PresenceHero stats={stats} goal={data!.goal} columns={data!.columns} />
               </section>
@@ -499,7 +574,11 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
             </section>
             <section className={stage ? "col-span-4 flex min-h-0 flex-col gap-4" : "flex min-w-0 flex-col gap-4 xl:col-span-4"}>
               <FollowUpQueue rows={stats.presencaRanking} className={stage ? "shrink-0" : ""} />
-              <ConfirmedList leads={stats.confirmed} className={stage ? "min-h-0 flex-1" : ""} />
+              <PressureClock
+                idle={pressure}
+                thresholds={{ presenca: ALERT_PRESENCA_MIN, convite: ALERT_CONVITE_MIN }}
+                className={stage ? "min-h-0 flex-1" : ""}
+              />
             </section>
           </div>
         </>
