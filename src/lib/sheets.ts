@@ -102,8 +102,12 @@ async function getAccessToken(email: string, rawKey: string): Promise<string> {
   return token.value;
 }
 
-async function fetchViaServiceAccount(sheetId: string, email: string, key: string): Promise<string[][]> {
-  const range = process.env.GOOGLE_SHEET_RANGE ?? "'Qualificação COF 2026'!A:Z";
+export async function fetchViaServiceAccount(
+  sheetId: string,
+  email: string,
+  key: string,
+  range = process.env.GOOGLE_SHEET_RANGE ?? "'Qualificação COF 2026'!A:Z",
+): Promise<string[][]> {
   const url =
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}` +
     `/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`;
@@ -118,7 +122,7 @@ async function fetchViaServiceAccount(sheetId: string, email: string, key: strin
 
 // ---------- CSV publicado (Arquivo > Compartilhar > Publicar na web) ----------
 
-async function fetchViaCsv(url: string): Promise<string[][]> {
+export async function fetchViaCsv(url: string): Promise<string[][]> {
   const res = await fetch(url, { cache: "no-store", redirect: "follow" });
   if (!res.ok) throw new Error(`Erro ao ler CSV (${res.status})`);
   // planilha privada: o Google responde 200 com a página de login em HTML

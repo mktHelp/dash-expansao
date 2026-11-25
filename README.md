@@ -17,6 +17,16 @@ Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o c
 - **`/` — campanha (direta):** meta de presenças, na mesa, funil, ranking de presenças e fila de follow-up. É a tela da TV.
 - **`/completo` — visão completa:** convites, qualificados, meta de presenças, ranking por leads, etapas no CRM, leads por mês e top estados.
 
+### Funil ao vivo (`/funil`)
+Lê a aba **"Ao Vivo"** da mesma planilha, onde os vendedores lançam cada lead da Black. Colunas: Candidato, Whatsapp, Cidade, UF, Responsável (SDR), Responsável (Closer), Modelo, Termo de Reserva, Taxa de Franquia (a ordem não importa).
+- **Venda** = lead com **Termo de Reserva** *ou* **Taxa de Franquia** preenchido ("Sim", valor ou data; vazio, "Não", "-" e "0" não contam). Conta uma vez por lead, mesmo com os dois. **Meta: 10** (`META_VENDAS`), em casas que acendem uma a uma.
+- Reservas e franquias também aparecem separadas, junto com o total de leads e quantos % viraram venda.
+- **Leads ao vivo:** todos os leads numa lista que rola sozinha quando não cabe na tela — vendas no topo (franquia, depois reserva), depois os mais novos. Mostra modelo, SDR, closer e status.
+- **Ranking de closers** (por vendas), **SDR · quem trouxe** (por leads) e a divisão **Loja × Home Based**.
+- **Alertas:** "NOVO LEAD NO FUNIL!", "RESERVA ASSINADA! +1 VENDA" e "FRANQUIA VENDIDA!" (confete + som) e "META BATIDA!" com fogos nas 10. Cada lead é anunciado uma vez por tela aberta.
+- O WhatsApp nunca sai do servidor; o candidato aparece como "Maria S.". O telão também aparece aqui.
+- **`/funil?demo=1`** mostra dados de exemplo (com a etiqueta MODO DEMO), para ver a tela antes do primeiro lead. **`/funil?simular=1`** + teclas **L**, **R**, **F**, **M** testa os alertas.
+
 ### Telão: imagem em todas as telas
 Abra **`/telao`** (no computador ou no celular), entre com a senha, escolha uma imagem e toque em **Mostrar em todas as telas**. Em até 15 s ela aparece num quadro grande no centro de todas as telas abertas (`/` e `/completo`), com legenda opcional, deixando a meta e o ranking visíveis em volta. Ela fica no ar até alguém tocar em **Remover de todas as telas** (ou mandar outra, que substitui).
 - A imagem é reduzida no próprio aparelho (até 1920 px, WebP) e guardada no Redis; as telas baixam uma vez por envio.
@@ -123,4 +133,6 @@ Na TV: abra o link e clique no botão de tela cheia (canto superior direito). O 
 | `src/lib/watch.ts` | relógio de inatividade (minutos de expediente) e recorde local de reserva |
 | `src/lib/record.ts` | recorde compartilhado no Redis (atualização atômica) |
 | `src/lib/telao.ts`, `src/app/telao`, `src/components/Telao*.tsx` | telão: imagem no centro de todas as telas |
+| `src/lib/funil.ts`, `src/app/funil`, `src/components/Funil.tsx` | funil ao vivo (aba "Ao Vivo") |
+| `src/lib/live.ts` | relógio, som e trava de recarga usados pelas duas telas |
 | `src/components/` | interface |

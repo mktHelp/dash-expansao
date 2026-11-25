@@ -42,3 +42,29 @@ export type TelaoMeta = {
   h: number;
   legenda: string; // texto opcional acima da imagem
 };
+
+// ---------- Funil ao vivo (aba "Ao Vivo") ----------
+
+/** Lead do funil ao vivo, já "higienizado": o WhatsApp NUNCA sai do servidor. */
+export type FunilLead = {
+  id: string;
+  row: number; // linha na planilha (ordem de inserção)
+  nome: string; // "Maria S."
+  cidade: string;
+  uf: string;
+  sdr: string; // Responsável (SDR)
+  closer: string; // Responsável (Closer)
+  modelo: string; // "Loja" | "Home Based" | ""
+  reserva: boolean; // Termo de Reserva preenchido
+  franquia: boolean; // Taxa de Franquia preenchida
+};
+
+export type FunilPayload = {
+  leads: FunilLead[];
+  columns: { sdr: boolean; closer: boolean; modelo: boolean; reserva: boolean; franquia: boolean };
+  goal: number; // meta de vendas (reserva ou franquia)
+  source: "sheets" | "csv" | "demo";
+  fetchedAt: number;
+  build?: string;
+  telao?: TelaoMeta | null;
+};

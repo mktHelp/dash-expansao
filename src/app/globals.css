@@ -137,6 +137,10 @@ body {
 }
 .alarm-pill { animation: pill-pulse 1.4s ease-out infinite; }
 
+/* funil: lista de leads que rola sozinha (duas cópias, sobe metade e recomeça) */
+@keyframes marquee-y { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+.animate-marquee-y { animation: marquee-y linear infinite; will-change: transform; }
+
 /* mouse parado: some o cursor e os botões (só ficam as informações) */
 html.idle,
 html.idle * {
@@ -153,6 +157,7 @@ html.idle .idle-hide {
 @media (prefers-reduced-motion: reduce) {
   .animate-toast, .animate-flash, .animate-bar, .animate-rise { animation-duration: 0.01s; }
   .hazard, .hot-panel, .animate-ring, .alarm-box, .alarm-vignette, .alarm-pill, .bar-sheen::after { animation: none; }
+  .animate-marquee-y { animation-duration: 240s !important; }
 }
 
 /* ============ Grande final (meta de 200) e modo campeão ============ */
