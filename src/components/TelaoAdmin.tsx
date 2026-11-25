@@ -33,9 +33,28 @@ const TRIES: [number, number][] = [
   [800, 0.65],
 ];
 
-type Prepared = { dataUrl: string; w: number; h: number; kb: number };
+type Prepared = { dataUrl: string; w: number; h: number; kb: number; gif: boolean };
+
+// GIF vai inteiro (reduzir pelo canvas congelaria a animação no 1º quadro)
+const MAX_GIF_BYTES = 3 * 1024 * 1024;
+
+const readAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("Não consegui ler esse arquivo."));
+    r.readAsDataURL(file);
+  });
 
 async function prepare(file: File): Promise<Prepared> {
+  if (file.type === "image/gif") {
+    if (file.size > MAX_GIF_BYTES)
+      throw new Error(`Esse GIF tem ${(file.size / 1024 / 1024).toFixed(1)} MB. O limite é 3 MB.`);
+    const bmp = await createImageBitmap(file); // só para saber largura e altura
+    const size = { w: bmp.width, h: bmp.height };
+    bmp.close();
+    return { dataUrl: await readAsDataUrl(file), ...size, kb: Math.round(file.size / 1024), gif: true };
+  }
   const bmp = await createImageBitmap(file);
   try {
     for (const [max, q] of TRIES) {
@@ -55,7 +74,7 @@ async function prepare(file: File): Promise<Prepared> {
         ctx.fillRect(0, 0, w, h);
         dataUrl = canvas.toDataURL("image/jpeg", q);
       }
-      if (dataUrl.length <= MAX_CHARS) return { dataUrl, w, h, kb: Math.round((dataUrl.length * 0.75) / 1024) };
+      if (dataUrl.length <= MAX_CHARS) return { dataUrl, w, h, kb: Math.round((dataUrl.length * 0.75) / 1024), gif: false };
     }
   } finally {
     bmp.close();
@@ -241,7 +260,11 @@ export default function TelaoAdmin() {
               ) : (
                 <ImagePlus size={28} className="text-bf" />
               )}
-              <span>{prepared ? `${prepared.w}×${prepared.h} · ${prepared.kb} KB · toque para trocar` : "Toque para escolher uma imagem (JPG, PNG, WebP)"}</span>
+              <span>
+                {prepared
+                  ? `${prepared.gif ? "GIF animado, " : ""}${prepared.w}×${prepared.h}, ${prepared.kb} KB. Toque para trocar.`
+                  : "Toque para escolher uma imagem ou GIF (JPG, PNG, WebP, GIF até 3 MB)"}
+              </span>
               <input
                 type="file"
                 accept="image/*"
@@ -270,7 +293,7 @@ export default function TelaoAdmin() {
             </button>
             <p className="flex items-start gap-1.5 text-xs text-zinc-500">
               <TriangleAlert size={13} className="mt-px shrink-0" />
-              A imagem fica no ar até alguém remover aqui. Ela é reduzida no seu aparelho antes de enviar.
+              A imagem fica no ar até alguém remover aqui. Fotos são reduzidas no seu aparelho; GIFs vão inteiros, até 3 MB.
             </p>
           </section>
         </>

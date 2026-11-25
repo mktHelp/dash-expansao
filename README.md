@@ -29,8 +29,9 @@ Lê a aba **"Ao Vivo"** da mesma planilha, onde os vendedores lançam cada lead 
 - **`/funil?demo=1`** mostra dados de exemplo (com a etiqueta MODO DEMO), para ver a tela antes do primeiro lead. **`/funil?simular=1`** + teclas **L**, **R**, **F**, **M** testa os alertas.
 
 ### Telão: imagem em todas as telas
-Abra **`/telao`** (no computador ou no celular), entre com a senha, escolha uma imagem e toque em **Mostrar em todas as telas**. Em até 15 s ela aparece num quadro grande no centro de todas as telas abertas (`/` e `/completo`), com legenda opcional, deixando a meta e o ranking visíveis em volta. Ela fica no ar até alguém tocar em **Remover de todas as telas** (ou mandar outra, que substitui).
+Abra **`/telao`** (no computador ou no celular), entre com a senha, escolha uma imagem ou um **GIF animado** e toque em **Mostrar em todas as telas**. Em até 15 s ela aparece num quadro grande no centro de todas as telas abertas (`/` e `/completo`), com legenda opcional, deixando a meta e o ranking visíveis em volta. Ela fica no ar até alguém tocar em **Remover de todas as telas** (ou mandar outra, que substitui).
 - A imagem é reduzida no próprio aparelho (até 1920 px, WebP) e guardada no Redis; as telas baixam uma vez por envio.
+- Fotos são reduzidas no próprio aparelho antes de subir. GIFs sobem inteiros (para continuar animados), até **3 MB**: o limite de uma requisição na Vercel é 4,5 MB e o GIF cresce ~33% ao ser enviado.
 - A senha é a variável **`TELAO_SENHA`** na Vercel (o repositório é público, então ela nunca vai para o código). Sem ela, ou sem Redis, a página avisa e o telão fica fechado.
 - Os alertas de presença e o alarme de inatividade continuam aparecendo por cima do quadro.
 

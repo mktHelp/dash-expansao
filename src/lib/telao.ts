@@ -1,7 +1,7 @@
 // Telão: uma imagem que aparece no centro de TODAS as telas do painel até ser
 // removida. Roda SOMENTE no servidor.
 //
-// A imagem chega já reduzida pelo navegador (página /telao) e fica no Redis
+// A imagem chega reduzida pelo navegador (GIF chega inteiro) e fica no Redis
 // como data URL; o "meta" (id, tamanho, legenda) vai junto de cada leitura do
 // painel e as telas baixam a imagem uma vez por id em /api/telao/imagem.
 // Mandar e remover exige a senha TELAO_SENHA (variável na Vercel).
@@ -9,9 +9,11 @@ import { timingSafeEqual } from "node:crypto";
 import { TELAO_IMG_KEY, TELAO_META_KEY, parseTelaoMeta, redis, sharedRecordConfigured } from "./record";
 import type { TelaoMeta } from "./types";
 
-// ~1 MB em base64: folga dentro do limite de requisição do Upstash gratuito
-export const MAX_DATA_URL = 1_400_000;
-const DATA_URL = /^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/=]+)$/;
+// Fotos chegam reduzidas (~1 MB). GIF chega inteiro (para continuar animado):
+// até 3 MB, que em base64 vira ~4 MB — abaixo do limite de 4,5 MB por
+// requisição da Vercel (o Upstash gratuito aceita até 10 MB).
+export const MAX_DATA_URL = 4_100_000;
+const DATA_URL = /^data:(image\/(?:webp|jpeg|png|gif));base64,([A-Za-z0-9+/=]+)$/;
 
 export const telaoAvailable = () => sharedRecordConfigured;
 
@@ -42,8 +44,8 @@ export async function getTelaoImage(id: string): Promise<{ type: string; bytes: 
 export function validateTelao(body: unknown): { dataUrl: string; meta: Omit<TelaoMeta, "id" | "at"> } | string {
   if (!body || typeof body !== "object") return "Corpo inválido";
   const { image, w, h, legenda } = body as Record<string, unknown>;
-  if (typeof image !== "string" || !DATA_URL.test(image)) return "Imagem inválida (use JPG, PNG ou WebP)";
-  if (image.length > MAX_DATA_URL) return "Imagem grande demais depois de reduzida";
+  if (typeof image !== "string" || !DATA_URL.test(image)) return "Imagem inválida (use JPG, PNG, WebP ou GIF)";
+  if (image.length > MAX_DATA_URL) return "Imagem grande demais (GIF até 3 MB)";
   const W = Number(w);
   const H = Number(h);
   if (!(W > 0 && W <= 6000 && H > 0 && H <= 6000)) return "Dimensões inválidas";
