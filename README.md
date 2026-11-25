@@ -17,6 +17,12 @@ Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o c
 - **`/` — campanha (direta):** meta de presenças, na mesa, funil, ranking de presenças e fila de follow-up. É a tela da TV.
 - **`/completo` — visão completa:** convites, qualificados, meta de presenças, ranking por leads, etapas no CRM, leads por mês e top estados.
 
+### Telão: imagem em todas as telas
+Abra **`/telao`** (no computador ou no celular), entre com a senha, escolha uma imagem e toque em **Mostrar em todas as telas**. Em até 15 s ela aparece num quadro grande no centro de todas as telas abertas (`/` e `/completo`), com legenda opcional, deixando a meta e o ranking visíveis em volta. Ela fica no ar até alguém tocar em **Remover de todas as telas** (ou mandar outra, que substitui).
+- A imagem é reduzida no próprio aparelho (até 1920 px, WebP) e guardada no Redis; as telas baixam uma vez por envio.
+- A senha é a variável **`TELAO_SENHA`** na Vercel (o repositório é público, então ela nunca vai para o código). Sem ela, ou sem Redis, a página avisa e o telão fica fechado.
+- Os alertas de presença e o alarme de inatividade continuam aparecendo por cima do quadro.
+
 ### Testar os alertas
 Abra `/?simular=presenca` (ou `convite`, `lead`, `marco`, `meta`). O alerta dispara em 3 s; depois use as teclas **P** (presença), **C** (convite), **L** (lead), **M** (marco), **G** (meta batida), **I** (+5 min sem presença) e **R** (resetar). Para ver o alarme direto: `/?simular=inatividade&minutos=20`.
 
@@ -116,4 +122,5 @@ Na TV: abra o link e clique no botão de tela cheia (canto superior direito). O 
 | `src/lib/stats.ts` | cálculo de ranking, etapas e métricas |
 | `src/lib/watch.ts` | relógio de inatividade (minutos de expediente) e recorde local de reserva |
 | `src/lib/record.ts` | recorde compartilhado no Redis (atualização atômica) |
+| `src/lib/telao.ts`, `src/app/telao`, `src/components/Telao*.tsx` | telão: imagem no centro de todas as telas |
 | `src/components/` | interface |

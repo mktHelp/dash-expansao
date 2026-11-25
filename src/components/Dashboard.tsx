@@ -16,6 +16,7 @@ import {
 } from "@/lib/celebrate";
 import { computeStats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
+import { TelaoCard } from "./Telao";
 import { bump, isWorkTime, loadWatch, saveWatch, workMinutes, type Watch } from "@/lib/watch";
 import FitStage, { useStaged } from "./FitStage";
 import { ChampionHero, FinaleOverlay, mvpOf, type Mvp } from "./Finale";
@@ -473,6 +474,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
           MODO SIMULAÇÃO · P = presença · C = convite · L = lead · M = marco · G = meta batida · I = +5 min sem presença · R = resetar
         </div>
       )}
+      {data?.telao && <TelaoCard meta={data.telao} />}
       {presencaLate && (
         <PresenceIdleAlert minutes={pressure!.presenca.minutes} threshold={ALERT_PRESENCA_MIN} since={pressure!.presenca.at} now={now} />
       )}

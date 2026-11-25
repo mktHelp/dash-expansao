@@ -30,4 +30,15 @@ export type LeadsPayload = {
   // relógio de inatividade: "shared" = recorde no servidor (igual em todas as
   // telas); "local" = sem Redis configurado (ou fora do ar), cada tela conta o seu
   clock?: { mode: "shared"; watch: Watch } | { mode: "local"; error?: boolean };
+  // imagem no centro de todas as telas (página /telao); null = nada no ar
+  telao?: TelaoMeta | null;
+};
+
+/** Imagem do telão no ar. A imagem em si é baixada em /api/telao/imagem?id=… */
+export type TelaoMeta = {
+  id: string; // muda a cada envio (e serve de chave de cache da imagem)
+  at: number; // quando foi enviada (epoch ms)
+  w: number; // largura e altura da imagem enviada, em px
+  h: number;
+  legenda: string; // texto opcional acima da imagem
 };

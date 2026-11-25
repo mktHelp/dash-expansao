@@ -1,18 +1,40 @@
-// Recorde COMPARTILHADO de presenças e convites — roda SOMENTE no servidor.
+// Estado COMPARTILHADO entre todas as telas — roda SOMENTE no servidor.
 //
-// Guarda no Upstash Redis (integração gratuita da Vercel) o maior total já
-// visto e QUANDO ele foi batido. Todas as telas recebem o mesmo {max, at} pela
-// API, então o relógio de "minutos sem presença nova" é igual em qualquer PC,
-// não depende do navegador e não zera ao recarregar ou abrir aba anônima.
-//
-// A atualização é atômica (script Lua no Redis): só um total MAIOR que o
-// recorde muda o "at". Desmarcar e marcar de novo volta ao mesmo número e não
-// zera nada.
+// Fica no Upstash Redis (integração gratuita da Vercel):
+//  - o RECORDE de presenças e convites e QUANDO ele foi batido. Todas as telas
+//    recebem o mesmo {max, at} pela API, então o relógio de "minutos sem
+//    presença nova" é igual em qualquer PC, não depende do navegador e não zera
+//    ao recarregar ou abrir aba anônima. A atualização é atômica (script Lua):
+//    só um total MAIOR que o recorde muda o "at" — desmarcar e marcar de novo
+//    volta ao mesmo número e não zera nada;
+//  - o TELÃO: a imagem que aparece no centro de todas as telas (ver telao.ts).
+//    O script devolve o "meta" dele junto, então cada leitura do painel custa
+//    um único comando no Redis.
+import type { TelaoMeta } from "./types";
 import type { Watch } from "./watch";
 
 const URL_ = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
 const TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
 const KEY = process.env.RECORDE_KEY ?? "dash-expansao:recordes";
+export const TELAO_META_KEY = "dash-expansao:telao:meta";
+export const TELAO_IMG_KEY = "dash-expansao:telao:img";
+
+export const sharedRecordConfigured = !!(URL_ && TOKEN);
+
+/** Executa um comando no Redis pela API REST do Upstash. */
+export async function redis(command: string[]): Promise<unknown> {
+  if (!URL_ || !TOKEN) throw new Error("Redis não configurado");
+  const res = await fetch(URL_, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(command),
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => null)) as { result?: unknown; error?: string } | null;
+  if (!res.ok || !json || "error" in json)
+    throw new Error(`Redis respondeu ${res.status}${json?.error ? `: ${json.error}` : ""}`);
+  return json.result;
+}
 
 const SCRIPT = `
 local now = tonumber(ARGV[1])
@@ -31,23 +53,37 @@ for i = 1, #fields do
   out[#out + 1] = tostring(max)
   out[#out + 1] = tostring(at)
 end
+out[#out + 1] = redis.call("GET", KEYS[2]) or ""
 return out
 `;
 
-export const sharedRecordConfigured = !!(URL_ && TOKEN);
+export function parseTelaoMeta(raw: unknown): TelaoMeta | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const m = JSON.parse(raw) as TelaoMeta;
+    return typeof m.id === "string" && m.w > 0 && m.h > 0 ? m : null;
+  } catch {
+    return null;
+  }
+}
 
-/** Atualiza o recorde com os totais atuais e devolve o recorde vigente (ou null sem Redis). */
-export async function updateSharedRecord(presenca: number, convite: number, now = Date.now()): Promise<Watch | null> {
-  if (!URL_ || !TOKEN) return null;
-  const res = await fetch(URL_, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(["EVAL", SCRIPT, "1", KEY, String(now), String(presenca), String(convite)]),
-    cache: "no-store",
-  });
-  const json = (await res.json().catch(() => null)) as { result?: unknown; error?: string } | null;
-  if (!res.ok || !json || !Array.isArray(json.result) || json.result.length < 4)
-    throw new Error(`Redis respondeu ${res.status}${json?.error ? `: ${json.error}` : ""}`);
-  const [pMax, pAt, cMax, cAt] = json.result.map(Number);
-  return { presenca: { max: pMax, at: pAt }, convite: { max: cMax, at: cAt } };
+/**
+ * Atualiza o recorde com os totais atuais e devolve o recorde vigente e o telão
+ * no ar (ou null sem Redis).
+ */
+export async function updateSharedRecord(
+  presenca: number,
+  convite: number,
+  now = Date.now(),
+): Promise<{ watch: Watch; telao: TelaoMeta | null } | null> {
+  if (!sharedRecordConfigured) return null;
+  const result = await redis([
+    "EVAL", SCRIPT, "2", KEY, TELAO_META_KEY, String(now), String(presenca), String(convite),
+  ]);
+  if (!Array.isArray(result) || result.length < 4) throw new Error("Resposta inesperada do Redis");
+  const [pMax, pAt, cMax, cAt] = result.slice(0, 4).map(Number);
+  return {
+    watch: { presenca: { max: pMax, at: pAt }, convite: { max: cMax, at: cAt } },
+    telao: parseTelaoMeta(result[4]),
+  };
 }
