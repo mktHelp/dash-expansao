@@ -1,10 +1,13 @@
 import { ArrowDown, ArrowUp, Crown, Equal, Flame, Sparkles, Swords, Trophy } from "lucide-react";
 import { initials, type RankRow } from "@/lib/stats";
 
+// A altura do degrau vem SÓ da posição (espaço extra no topo da caixa): todas
+// as caixas têm as mesmas linhas, então o 1º é sempre o mais alto, depois o 2º
+// e o 3º — o texto de cada um nunca muda essa ordem. Empatados ficam iguais.
 const MEDAL = [
-  { ring: "ring-bf", bg: "bg-bf text-ink", label: "text-bf", height: "min-h-40 sm:min-h-44", compact: "min-h-36" },
-  { ring: "ring-zinc-300", bg: "bg-zinc-300 text-ink", label: "text-zinc-200", height: "min-h-32 sm:min-h-36", compact: "min-h-32" },
-  { ring: "ring-amber-700", bg: "bg-amber-700 text-white", label: "text-amber-500", height: "min-h-28 sm:min-h-32", compact: "min-h-28" },
+  { ring: "ring-bf", bg: "bg-bf text-ink", label: "text-bf", lift: "h-10 sm:h-12", compactLift: "h-9" },
+  { ring: "ring-zinc-300", bg: "bg-zinc-300 text-ink", label: "text-zinc-200", lift: "h-5 sm:h-6", compactLift: "h-4" },
+  { ring: "ring-amber-700", bg: "bg-amber-700 text-white", label: "text-amber-500", lift: "h-0", compactLift: "h-0" },
 ];
 
 /** "presenca" = tela da campanha (conta presenças confirmadas); "leads" = visão completa. */
@@ -86,6 +89,7 @@ function Podium({
   idx,
   highlight,
   gap,
+  ahead,
   tiedWith,
   chasing,
   mode,
@@ -95,6 +99,7 @@ function Podium({
   idx: number;
   highlight: boolean;
   gap: number | null;
+  ahead: number; // vantagem do líder sobre o 2º (só usada no 1º lugar)
   tiedWith: string | null; // nome de quem está empatado com ele (se houver)
   chasing: boolean;
   mode: RankingMode;
@@ -104,14 +109,18 @@ function Podium({
   const m = MEDAL[Math.min(row.position, 3) - 1];
   return (
     <div className={`flex flex-1 flex-col items-center ${idx === 0 ? "order-2" : idx === 1 ? "order-1" : "order-3"}`}>
-      {row.position === 1 && (
-        <Crown className="mb-1 text-bf drop-shadow-[0_0_12px_rgba(248,190,25,0.8)]" size={compact ? 26 : 34} />
-      )}
       <div
-        className={`grid place-items-center rounded-full bg-zinc-900 font-display ring-4 ${
+        className={`relative grid place-items-center rounded-full bg-zinc-900 font-display ring-4 ${
           compact ? "size-14 text-2xl" : "size-16 text-2xl sm:size-20 sm:text-3xl"
         } ${m.ring} ${highlight ? "animate-flash" : ""}`}
       >
+        {/* coroa por cima do avatar, fora do fluxo: não muda a altura da coluna */}
+        {row.position === 1 && (
+          <Crown
+            className="absolute bottom-full left-1/2 mb-0.5 -translate-x-1/2 text-bf drop-shadow-[0_0_12px_rgba(248,190,25,0.8)]"
+            size={compact ? 26 : 32}
+          />
+        )}
         {initials(row.name)}
       </div>
       <p className={`max-w-full truncate text-center font-bold ${compact ? "mt-1 text-lg" : "mt-2 text-sm sm:text-lg"}`}>{row.name}</p>
@@ -122,27 +131,34 @@ function Podium({
         <OnFire today={row.valueToday} />
       </div>
       <div
-        className={`mt-2 flex w-full flex-col items-center justify-start rounded-t-xl pb-2 ${compact ? `pt-2 ${m.compact}` : `pt-3 ${m.height}`} ${
+        className={`mt-2 flex w-full flex-col items-center justify-start rounded-t-xl pb-2 pt-2 ${
           row.position === 1 ? "bg-gradient-to-b from-bf/30 to-bf/5" : "bg-gradient-to-b from-zinc-700/40 to-zinc-800/10"
         }`}
       >
-        <span className={`font-display text-6xl leading-none sm:text-7xl ${m.label}`}>{row.value}</span>
+        <div className={`w-full shrink-0 ${compact ? m.compactLift : m.lift}`} />
+        <div className="flex items-center gap-3">
+          <span className={`font-display text-6xl leading-none sm:text-7xl ${m.label}`}>{row.value}</span>
+          <span className={`rounded-full px-2.5 py-0.5 text-base font-black ${m.bg}`}>{row.position}º</span>
+        </div>
         <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">{unit(mode, row.value)}</span>
-        <span className={`rounded-full px-2.5 py-0.5 text-base font-black ${compact ? "mt-1" : "mt-2"} ${m.bg}`}>{row.position}º</span>
-        <span className="mt-1.5 px-1 text-center text-xs text-zinc-400">
+        <span className="mt-1 px-1 text-center text-xs text-zinc-400">
           <Details row={row} mode={mode} strong="text-bf" />
         </span>
-        {tiedWith ? (
-          <span className="mt-0.5 px-1 text-center text-xs font-semibold text-sky-200">
-            empatado com {tiedWith.split(" ")[0]}
-          </span>
-        ) : (
-          gap != null && (
-            <span className="mt-0.5 px-1 text-center text-xs text-zinc-300">
+        <span className="mt-0.5 px-1 text-center text-xs text-zinc-300">
+          {tiedWith ? (
+            <b className="text-sky-200">empatado com {tiedWith.split(" ")[0]}</b>
+          ) : gap != null ? (
+            <>
               faltam <b className="text-bf">{gap}</b> p/ o {row.position - 1}º
-            </span>
-          )
-        )}
+            </>
+          ) : ahead > 0 ? (
+            <>
+              lidera por <b className="text-bf">{ahead}</b>
+            </>
+          ) : (
+            <>&nbsp;</>
+          )}
+        </span>
       </div>
     </div>
   );
@@ -217,14 +233,15 @@ export default function Ranking({
         </div>
       ) : (
         <>
-          <div className="flex items-end gap-2 sm:gap-4">
+          <div className={`flex items-end gap-2 sm:gap-4 ${compact ? "pt-5" : "pt-3"}`}>
             {top.map((r, i) => (
               <Podium
                 key={r.key}
                 row={r}
                 idx={i}
                 highlight={highlight === r.key}
-                gap={i > 0 ? rows[i - 1].value - r.value + 1 : null}
+                gap={r.position > 1 ? rows[i - 1].value - r.value + 1 : null}
+                ahead={rows[1] ? leader.value - rows[1].value : 0}
                 tiedWith={tieOf(i)}
                 chasing={r.position > 1 && leader.value - r.value <= 2 && r.value > 0}
                 mode={mode}
