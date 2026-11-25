@@ -1,7 +1,7 @@
 // Leitura da planilha — roda SOMENTE no servidor (API route).
 import { createSign } from "node:crypto";
 import type { Lead, LeadsPayload } from "./types";
-import { hashId, isYes, norm, parseBRDate, shortName, titleCase, toStage, toUF } from "./normalize";
+import { hashId, isNo, isYes, norm, parseBRDate, shortName, titleCase, toStage, toUF } from "./normalize";
 import { demoRows } from "./demo";
 
 type Field = "data" | "nome" | "email" | "telefone" | "cidade" | "uf" | "vendedor" | "etapa" | "qualificacao" | "venda" | "cof" | "convite" | "presenca";
@@ -43,8 +43,8 @@ export async function getLeadsPayload(): Promise<LeadsPayload> {
 }
 
 async function load(): Promise<LeadsPayload> {
-  // meta = quantidade de linhas com "COF Enviada" = Sim
-  const goal = Number(process.env.META_COF ?? process.env.META_LEADS ?? 200) || 200;
+  // meta = quantidade de linhas com "Presença Confirmada" = Sim
+  const goal = Number(process.env.META_PRESENCA ?? 100) || 100;
   const { GOOGLE_SHEET_ID, GOOGLE_SHEET_GID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, SHEET_CSV_URL } = process.env;
 
   let rows: string[][];
@@ -207,6 +207,7 @@ function rowsToLeads(rows: string[][]): Pick<LeadsPayload, "leads" | "columns"> 
       cof: isYes(get(r, "cof")),
       convite: isYes(get(r, "convite")),
       presenca: isYes(get(r, "presenca")),
+      presencaNao: isNo(get(r, "presenca")),
     });
   }
   return { leads, columns };

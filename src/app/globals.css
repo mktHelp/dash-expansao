@@ -86,6 +86,26 @@ body {
   animation: bar-grow 0.9s ease-out;
 }
 
+/* "na mesa": convidados sem resposta — vermelho que pulsa devagar */
+.hot-panel {
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgb(239 68 68 / 0.28), transparent 60%),
+    linear-gradient(180deg, #1a0d0d, #0f0f0f);
+  animation: heat 2.4s ease-in-out infinite;
+}
+@keyframes heat {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(239 68 68 / 0), inset 0 0 40px rgb(239 68 68 / 0.08); }
+  50% { box-shadow: 0 0 40px 2px rgb(239 68 68 / 0.35), inset 0 0 60px rgb(239 68 68 / 0.16); }
+}
+
+/* telefone tocando */
+@keyframes ring {
+  0%, 60%, 100% { transform: rotate(0); }
+  10%, 30%, 50% { transform: rotate(-14deg); }
+  20%, 40% { transform: rotate(14deg); }
+}
+.animate-ring { animation: ring 1.6s ease-in-out infinite; transform-origin: 50% 50%; }
+
 /* mouse parado: some o cursor e os botões (só ficam as informações) */
 html.idle,
 html.idle * {
@@ -101,7 +121,7 @@ html.idle .idle-hide {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-toast, .animate-flash, .animate-bar, .animate-rise { animation-duration: 0.01s; }
-  .hazard { animation: none; }
+  .hazard, .hot-panel, .animate-ring { animation: none; }
 }
 
 /* ============ Grande final (meta de 200) e modo campeão ============ */

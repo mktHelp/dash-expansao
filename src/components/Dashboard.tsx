@@ -14,12 +14,28 @@ import {
   preloadVictory,
   startAmbientSparkles,
 } from "@/lib/celebrate";
-import { computeStats, dayKey } from "@/lib/stats";
+import { computeStats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
 import FitStage, { useStaged } from "./FitStage";
 import { ChampionHero, FinaleOverlay, mvpOf, type Mvp } from "./Finale";
 import Ranking from "./Ranking";
-import { CofHistory, Countdown, DailyGoalToast, Feed, Funnel, GoalHero, Kpis, LiveBadge, MonthlyChart, NewLeadToast, States } from "./Panels";
+import {
+  ConfirmedList,
+  ConversionFunnel,
+  Countdown,
+  Feed,
+  FollowUpQueue,
+  Funnel,
+  HotQueue,
+  Kpis,
+  LiveBadge,
+  MilestoneToast,
+  MonthlyChart,
+  NewLeadToast,
+  PresenceHero,
+  States,
+  type ToastKind,
+} from "./Panels";
 
 // ---- relógio (1s) sem setState em efeito ----
 const subscribeClock = (cb: () => void) => {
@@ -94,24 +110,25 @@ function reloadedRecently(): boolean {
 }
 
 export type Alert =
-  | { kind: "lead" | "cof"; lead: Lead }
-  | { kind: "daily"; cofToday: number; dailyGoal: number; day: string }
-  | { kind: "goal"; cof: number; goal: number; mvp: Mvp };
-// alertas que viram aviso no topo (a meta de 200 tem a tela cheia própria)
+  | { kind: ToastKind; lead: Lead; left?: number }
+  | { kind: "milestone"; value: number; goal: number }
+  | { kind: "goal"; value: number; goal: number; mvp: Mvp };
+// alertas que viram aviso no topo (a meta tem a tela cheia própria)
 type ToastAlert = Exclude<Alert, { kind: "goal" }>;
 const isToast = (a: Alert): a is ToastAlert => a.kind !== "goal";
+
+// marcos da meta que ganham comemoração própria (25%, 50%, 75%)
+const MILESTONES = [0.25, 0.5, 0.75];
 
 function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const [data, setData] = useState<LeadsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // ids já anunciados como "novo lead" e como "COF enviada"
-  const known = useRef<{ leads: Set<string>; cof: Set<string> } | null>(null);
+  // ids já anunciados como "novo lead", "convite enviado" e "presença confirmada"
+  const known = useRef<{ leads: Set<string>; convite: Set<string>; presenca: Set<string> } | null>(null);
   // versão do deploy vista na 1ª leitura; se mudar, recarrega a página sozinho
   const build = useRef<string | null>(null);
-  // dia em que a meta diária já estava batida (para tocar a buzina só na virada)
-  const dailyMet = useRef<string | null | undefined>(undefined);
-  // meta de 200 já estava batida? (grande final só na virada)
-  const goalMet = useRef<boolean | undefined>(undefined);
+  // presenças na leitura anterior (para os marcos e a grande final só na virada)
+  const lastPresenca = useRef<number | null>(null);
   const onAlertsRef = useRef(onAlerts);
   useEffect(() => {
     onAlertsRef.current = onAlerts;
@@ -136,44 +153,44 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
           build.current = payload.build;
         }
         const owned = payload.leads.filter((l) => l.vendedor);
+        const goal = payload.goal;
+        const st = computeStats(payload.leads, Date.now(), goal);
 
-        // meta diária: buzina só quando passa de "não batida" para "batida"
-        const now = Date.now();
-        const st = computeStats(payload.leads, now, payload.goal);
-        const metDay = st.dailyGoal > 0 && st.cofToday >= st.dailyGoal ? dayKey(now) : null;
-        const dailyAlert: Alert[] =
-          dailyMet.current !== undefined && metDay && dailyMet.current !== metDay
-            ? [{ kind: "daily", cofToday: st.cofToday, dailyGoal: st.dailyGoal, day: metDay }]
-            : [];
-        dailyMet.current = metDay;
-
-        // meta da Black (200): grande final quando passa de "não batida" para "batida"
-        const reached = payload.goal > 0 && st.cof >= payload.goal;
-        const goalAlert: Alert[] =
-          goalMet.current === false && reached
-            ? [{ kind: "goal", cof: st.cof, goal: payload.goal, mvp: mvpOf(st.ranking) }]
-            : [];
-        goalMet.current = reached;
-        // na mesma virada, a grande final substitui a comemoração do dia
-        const bigAlerts = goalAlert.length ? goalAlert : dailyAlert;
+        // meta batida (grande final) ou marco cruzado — só na virada, nunca na 1ª leitura
+        const prev = lastPresenca.current;
+        const bigAlerts: Alert[] = [];
+        if (prev != null && goal > 0 && st.presenca > prev) {
+          if (prev < goal && st.presenca >= goal) {
+            bigAlerts.push({ kind: "goal", value: st.presenca, goal, mvp: mvpOf(st.presencaRanking) });
+          } else {
+            const crossed = MILESTONES.map((m) => Math.round(goal * m)).filter((v) => prev < v && st.presenca >= v);
+            if (crossed.length) bigAlerts.push({ kind: "milestone", value: crossed[crossed.length - 1], goal });
+          }
+        }
+        lastPresenca.current = st.presenca;
 
         if (!known.current) {
           // primeira leitura: tudo que já existe conta como "visto"
           known.current = {
             leads: new Set(owned.map((l) => l.id)),
-            cof: new Set(owned.filter((l) => l.cof).map((l) => l.id)),
+            convite: new Set(owned.filter((l) => l.convite).map((l) => l.id)),
+            presenca: new Set(owned.filter((l) => l.presenca).map((l) => l.id)),
           };
         } else {
           const seen = known.current;
           const alerts: Alert[] = [];
-          // só anuncia linhas que já têm Responsável
+          const left = Math.max(0, goal - st.presenca);
+          // só anuncia linhas que já têm Responsável; presença vale mais que convite, que vale mais que lead novo
           for (const l of owned) {
             const isNew = !seen.leads.has(l.id);
-            const cofNow = l.cof && !seen.cof.has(l.id);
+            const conviteNow = l.convite && !seen.convite.has(l.id);
+            const presencaNow = l.presenca && !seen.presenca.has(l.id);
             if (isNew) seen.leads.add(l.id);
-            if (cofNow) seen.cof.add(l.id);
-            if (cofNow) alerts.push({ lead: l, kind: "cof" });
-            else if (isNew) alerts.push({ lead: l, kind: "lead" });
+            if (conviteNow) seen.convite.add(l.id);
+            if (presencaNow) seen.presenca.add(l.id);
+            if (presencaNow) alerts.push({ kind: "presenca", lead: l, left });
+            else if (conviteNow) alerts.push({ kind: "convite", lead: l });
+            else if (isNew) alerts.push({ kind: "lead", lead: l });
           }
           // >10 de uma vez = provavelmente importação em massa; não spamma alertas
           if (alerts.length > 10) alerts.length = 0;
@@ -225,34 +242,35 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
 
   const [finale, setFinale] = useState<Extract<Alert, { kind: "goal" }> | null>(null);
   const onAlerts = useCallback((alerts: Alert[]) => {
-    // grande final (meta de 200): tela cheia, show de fogos e sons em sequência
+    // grande final (meta de presenças): tela cheia, show de fogos e sons em sequência
     const goal = alerts.find((a) => a.kind === "goal");
     if (goal) {
       setFinale(goal);
       fireworksShow(14000);
       if (soundRef.current) playCelebration(getAudio(), "finale");
-      const rest = alerts.filter(isToast).filter((a) => a.kind !== "daily");
+      const rest = alerts.filter(isToast).filter((a) => a.kind !== "milestone");
       setQueue((q) => [...q, ...rest].slice(-6));
       return;
     }
     setQueue((q) => [...q, ...alerts.filter(isToast)].slice(-6));
-    const daily = alerts.some((a) => a.kind === "daily");
-    // meta do dia: confete na tela sempre; som de vitória se o som estiver ligado
-    if (daily) confettiBurst(5000);
+    const milestone = alerts.some((a) => a.kind === "milestone");
+    const presenca = alerts.some((a) => a.kind === "presenca");
+    // marco: confete longo + vitória; presença: confete rápido + "plim"
+    if (milestone) confettiBurst(5000);
+    else if (presenca) confettiBurst(1800);
     if (soundRef.current) {
-      if (daily) playVictory(getAudio());
+      if (milestone) playVictory(getAudio());
       else playChaChing();
     }
   }, []);
 
-  // meta do dia atual (o alerta simulado mostra o número real)
-  const goalRef = useRef(18);
+  // números reais usados pelos alertas simulados
+  const simRef = useRef<{ presenca: number; goal: number; mvp: Mvp }>({ presenca: 0, goal: 100, mvp: null });
   // simulação da grande final: força o "modo campeão" sem mexer na planilha
   const [forceChampion, setForceChampion] = useState(false);
-  const simGoalRef = useRef<{ cof: number; goal: number; mvp: Mvp }>({ cof: 200, goal: 200, mvp: null });
 
-  // ---- modo de teste: ?simular=true (ou meta | lead | cof) ----
-  // dispara o alerta 3s após abrir; depois, teclas M (meta), L (lead) e C (COF)
+  // ---- modo de teste: ?simular=true (ou presenca | convite | lead | marco | meta) ----
+  // dispara o alerta 3s após abrir; depois, teclas P, C, L, M, G e R
   const sim = useSyncExternalStore(noopSubscribe, readSimParam, () => null);
   const audioState = useSyncExternalStore(subscribeAudio, readAudioState, serverAudioState);
   const soundBlocked = sound && audioState !== "running";
@@ -260,28 +278,33 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
     if (!sim) return;
     const fake: Lead = {
       id: "sim", row: 0, ts: Date.now(), hasTime: true, nome: "Lead T.", cidade: "São Paulo", uf: "SP",
-      vendedor: "Fernando", etapa: "Envio COF e Materiais", qualificacao: "", venda: false, cof: true, convite: false, presenca: false,
+      vendedor: "Valmor", etapa: "Reunião de Indicadores", qualificacao: "", venda: false, cof: true, convite: true,
+      presenca: true, presencaNao: false,
     };
-    const fire = (kind: "daily" | "lead" | "cof" | "goal") => {
+    type SimKind = "presenca" | "convite" | "lead" | "milestone" | "goal";
+    const fire = (kind: SimKind) => {
+      const { presenca, goal, mvp } = simRef.current;
       if (kind === "goal") {
         setForceChampion(true);
-        onAlerts([{ kind, cof: simGoalRef.current.cof, goal: simGoalRef.current.goal, mvp: simGoalRef.current.mvp }]);
+        onAlerts([{ kind, value: Math.max(presenca, goal), goal, mvp: mvp ?? { name: "Valmor", presenca: 52 } }]);
         return;
       }
-      onAlerts([
-        kind === "daily"
-          ? { kind, cofToday: goalRef.current, dailyGoal: goalRef.current, day: `sim-${Date.now()}` }
-          : { kind, lead: { ...fake, id: `sim-${Date.now()}` } },
-      ]);
+      if (kind === "milestone") {
+        onAlerts([{ kind, value: Math.round(goal / 2), goal }]);
+        return;
+      }
+      onAlerts([{ kind, lead: { ...fake, id: `sim-${Date.now()}` }, left: Math.max(0, goal - presenca - 1) }]);
     };
-    const first =
-      sim === "lead" ? "lead" : sim === "cof" ? "cof" : sim === "200" || sim === "final" || sim === "campeao" ? "goal" : "daily";
+    const first: SimKind =
+      sim === "convite" ? "convite" : sim === "lead" ? "lead" : sim === "marco" ? "milestone"
+        : sim === "meta" || sim === "final" || sim === "campeao" ? "goal" : "presenca";
     const t = setTimeout(() => fire(first), 3000);
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
-      if (k === "m") fire("daily");
+      if (k === "p") fire("presenca");
+      else if (k === "c") fire("convite");
       else if (k === "l") fire("lead");
-      else if (k === "c") fire("cof");
+      else if (k === "m") fire("milestone");
       else if (k === "g") fire("goal");
       else if (k === "r") setForceChampion(false);
     };
@@ -303,13 +326,11 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
     [data, minute],
   );
   useEffect(() => {
-    if (stats?.dailyGoal) goalRef.current = stats.dailyGoal;
-    if (stats && data)
-      simGoalRef.current = { cof: Math.max(stats.cof, data.goal), goal: data.goal, mvp: mvpOf(stats.ranking) ?? { name: "Fernando", cof: 112 } };
+    if (stats && data) simRef.current = { presenca: stats.presenca, goal: data.goal, mvp: mvpOf(stats.presencaRanking) };
   }, [stats, data]);
 
-  // modo campeão: meta de 200 batida (ou simulada) → tema dourado + brilho caindo
-  const champion = !!(stats && data && (stats.cof >= data.goal || forceChampion));
+  // modo campeão: meta de presenças batida (ou simulada) → tema dourado + brilho caindo
+  const champion = !!(stats && data && (stats.presenca >= data.goal || forceChampion));
   useEffect(() => {
     document.documentElement.classList.toggle("champion", champion);
     if (!champion) return;
@@ -318,7 +339,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
   const dismissFinale = useCallback(() => setFinale(null), []);
 
   const current = queue[0];
-  const highlight = current && current.kind !== "daily" && current.lead.vendedor ? norm(current.lead.vendedor) : null;
+  const highlight = current && current.kind !== "milestone" && current.lead.vendedor ? norm(current.lead.vendedor) : null;
 
   // TV: tela simples num palco 1920×1080 que se ajusta à tela, sem rolagem
   const { staged, w, h } = useStaged();
@@ -365,15 +386,21 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       )}
       {sim && (
         <div className="fixed bottom-3 left-3 z-40 rounded-full border border-sky-400/50 bg-sky-500/15 px-3 py-1 text-xs font-semibold text-sky-200">
-          MODO SIMULAÇÃO · M = meta do dia · G = meta de 200 · R = sair do modo campeão · L = lead · C = COF
+          MODO SIMULAÇÃO · P = presença · C = convite · L = lead · M = marco · G = meta batida · R = sair do modo campeão
         </div>
       )}
-      {finale && <FinaleOverlay key={finale.cof} cof={finale.cof} goal={finale.goal} mvp={finale.mvp} onDone={dismissFinale} />}
+      {finale && <FinaleOverlay key={finale.value} value={finale.value} goal={finale.goal} mvp={finale.mvp} onDone={dismissFinale} />}
       {current && (
-        current.kind === "daily" ? (
-          <DailyGoalToast key={`daily-${current.day}`} cofToday={current.cofToday} dailyGoal={current.dailyGoal} onDone={dismissToast} />
+        current.kind === "milestone" ? (
+          <MilestoneToast key={`marco-${current.value}`} value={current.value} goal={current.goal} onDone={dismissToast} />
         ) : (
-          <NewLeadToast key={`${current.kind}-${current.lead.id}`} lead={current.lead} kind={current.kind} onDone={dismissToast} />
+          <NewLeadToast
+            key={`${current.kind}-${current.lead.id}`}
+            lead={current.lead}
+            kind={current.kind}
+            left={current.left}
+            onDone={dismissToast}
+          />
         )
       )}
 
@@ -393,7 +420,7 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
             {champion ? <span className="gold-text">BLACK FRIDAY</span> : <><span className="glow-text text-bf">BLACK</span> FRIDAY</>}
           </h1>
           <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-zinc-400 sm:text-xs">
-            {champion ? "🏆 Meta batida · Corrida da Expansão" : "Corrida da Expansão · Leads em COF"}
+            {champion ? "🏆 Meta batida · Casa cheia" : "Corrida da Expansão · Presenças confirmadas"}
           </p>
         </div>
 
@@ -441,27 +468,38 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       ) : variant === "simple" ? (
         <>
           {champion ? (
-            <ChampionHero
-              stats={forceChampion ? { ...stats, cof: Math.max(stats.cof, data!.goal) } : stats}
-              goal={data!.goal}
-              mvp={mvpOf(stats.ranking) ?? (forceChampion ? { name: "Fernando", cof: 112 } : null)}
-            />
+            <div className={stage ? "h-[390px] shrink-0" : ""}>
+              <ChampionHero
+                stats={forceChampion ? { ...stats, presenca: Math.max(stats.presenca, data!.goal) } : stats}
+                goal={data!.goal}
+                mvp={mvpOf(stats.presencaRanking) ?? (forceChampion ? { name: "Valmor", presenca: 52 } : null)}
+              />
+            </div>
           ) : (
-            <GoalHero stats={stats} goal={data!.goal} columns={data!.columns} />
+            <div className={stage ? "grid h-[390px] shrink-0 grid-cols-12 gap-4" : "grid gap-4 xl:grid-cols-12"}>
+              <section className={stage ? "col-span-8 min-h-0" : "min-w-0 xl:col-span-8"}>
+                <PresenceHero stats={stats} goal={data!.goal} columns={data!.columns} />
+              </section>
+              <section className={stage ? "col-span-4 min-h-0" : "min-w-0 xl:col-span-4"}>
+                <HotQueue stats={stats} goal={data!.goal} columns={data!.columns} />
+              </section>
+            </div>
           )}
+          <ConversionFunnel stats={stats} columns={data!.columns} />
           <div className={stage ? "grid min-h-0 flex-1 grid-cols-12 gap-4" : "grid items-start gap-4 xl:grid-cols-12"}>
             <section className={stage ? "col-span-8 min-h-0" : "min-w-0 xl:col-span-8"}>
               <Ranking
-                rows={stats.cofRanking}
+                rows={stats.presencaRanking}
                 highlight={highlight}
                 hasColumn={data!.columns.responsavel}
                 className={stage ? "h-full overflow-hidden" : ""}
-                cofOnly
+                mode="presenca"
+                compact={stage}
               />
             </section>
             <section className={stage ? "col-span-4 flex min-h-0 flex-col gap-4" : "flex min-w-0 flex-col gap-4 xl:col-span-4"}>
-              <Feed leads={stats.recent.slice(0, 4)} now={now} className={stage ? "shrink-0 overflow-hidden" : ""} cofOnly />
-              <CofHistory daily={stats.cofDaily} now={now} className={stage ? "min-h-0 flex-1" : ""} />
+              <FollowUpQueue rows={stats.presencaRanking} className={stage ? "shrink-0" : ""} />
+              <ConfirmedList leads={stats.confirmed} className={stage ? "min-h-0 flex-1" : ""} />
             </section>
           </div>
         </>

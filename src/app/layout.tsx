@@ -7,7 +7,7 @@ const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Black Friday Expansão · HelpMultas",
-  description: "Ranking ao vivo dos leads em COF durante a Black Friday",
+  description: "Presenças confirmadas ao vivo na Black Friday da Expansão",
 };
 
 export const viewport: Viewport = {

@@ -11,16 +11,17 @@ export type Lead = {
   etapa: string; // "Etapa atual no CRM", sem o nome do dono
   qualificacao: string; // "Qualificado" | "Não qualificado" | "Sem informação de capital" | ...
   venda: boolean; // coluna "Venda efetivada" preenchida
-  cof: boolean; // coluna "COF Enviada" = Sim (conta 1 na meta)
+  cof: boolean; // coluna "COF Enviada" = Sim (base = 100% dos convites)
   convite: boolean; // coluna "Convite Enviado" = Sim
-  presenca: boolean; // coluna "Presença Confirmada" = Sim
+  presenca: boolean; // coluna "Presença Confirmada" = Sim (conta 1 na meta)
+  presencaNao: boolean; // coluna "Presença Confirmada" = Não (recusou)
 };
 
 export type LeadsPayload = {
   leads: Lead[];
-  // colunas novas encontradas no cabeçalho (para avisar no painel se faltarem)
+  // colunas encontradas no cabeçalho (para avisar no painel se faltarem)
   columns: { responsavel: boolean; cofEnviada: boolean; convite: boolean; presenca: boolean };
-  goal: number;
+  goal: number; // meta de presenças confirmadas
   source: "sheets" | "csv" | "demo";
   fetchedAt: number;
   build?: string; // id do deploy; quando muda, as telas abertas recarregam

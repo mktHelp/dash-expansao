@@ -1,17 +1,23 @@
-# Black Friday Expansão — Painel ao vivo de leads em COF
+# Black Friday Expansão — Painel ao vivo de presenças confirmadas
 
-Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba *Qualificação COF 2026*) direto do Google Sheets — sem banco de dados — e mostra em tempo real, até **15/11**:
+Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba *Qualificação COF 2026*) direto do Google Sheets — sem banco de dados — e mostra em tempo real, até o **evento (27/11)**:
 
-- 🏆 **Ranking de vendedores** (coluna *Responsável*): pódio, "faltam X para passar Fulano", ▲▼ posições nas últimas 24h, selo *on fire* com 3+ leads no dia, qualificados e vendas de cada um
-- 🔥 **Alerta de NOVO LEAD** na tela quando alguém adiciona uma linha com Responsável (som opcional)
-- **Meta de 200 COFs enviadas** (coluna *COF Enviada* = Sim) e KPIs: total de leads da planilha, hoje vs ontem, qualificados, vendas, etapas no CRM, leads por mês (novembro marcado como Black Friday), top UFs e últimos leads
-- Contagem regressiva até 15/11
+- 🎯 **Meta de 100 presenças confirmadas** (coluna *Presença Confirmada* = Sim) em destaque, com o **ritmo necessário por dia** até o evento
+- ☎️ **Na mesa:** convidados que ainda não responderam (convite = Sim e presença vazia) e quantos deles precisam virar para bater a meta
+- **Funil de conversão:** COFs enviadas (100%) → convites enviados → presenças confirmadas, com as taxas entre cada etapa e as recusas
+- 🏆 **Ranking de presenças** por vendedor (coluna *Responsável*): pódio, "faltam X para passar Fulano", selo *na cola* quando o 2º está a 1–2 do líder, convites, fila e taxa de confirmação de cada um
+- **Fila de follow-up** por vendedor e lista dos últimos confirmados
+- 🔔 **Alertas na tela:** "PRESENÇA CONFIRMADA! +1 NA META" (confete + som), "CONVITE ENVIADO!" e "NOVO LEAD NA COF!"; comemoração nos marcos de 25, 50 e 75 e grande final nas 100
+- Contagem regressiva até o evento
 
 Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o candidato aparece como "Maria S.".
 
 ### Duas telas
-- **`/` — campanha (direta):** meta de COFs enviadas em destaque, ranking de vendedores e últimos leads. É a tela da TV durante a Black.
-- **`/completo` — visão completa:** tudo acima + qualificados, etapas no CRM, leads por mês e top estados. Para usar depois da Black.
+- **`/` — campanha (direta):** meta de presenças, na mesa, funil, ranking de presenças e fila de follow-up. É a tela da TV.
+- **`/completo` — visão completa:** convites, qualificados, meta de presenças, ranking por leads, etapas no CRM, leads por mês e top estados.
+
+### Testar os alertas
+Abra `/?simular=presenca` (ou `convite`, `lead`, `marco`, `meta`). O alerta dispara em 3 s; depois use as teclas **P** (presença), **C** (convite), **L** (lead), **M** (marco), **G** (meta batida) e **R** (sair do modo campeão).
 
 ---
 
@@ -32,25 +38,19 @@ Planilha **Relatório COF**, aba **`Qualificação COF 2026`**. O painel encontr
 | Etapa anterior / Categorias TurboCRM | — | já existem |
 | **Venda efetivada** | KPI de vendas e desempate (qualquer valor ≠ "não" conta) | já existe |
 | Encontrado em / Como foi encontrado | — | já existem |
-| **Responsável** | **ranking de vendedores** | ⚠️ **NOVA** |
-| **COF Enviada** | **meta: cada "Sim" = 1 ponto, de 200** | ⚠️ **NOVA** |
-
-### Como adicionar as duas colunas
-1. Clique com o botão direito no cabeçalho da **coluna Q** (a coluna vazia entre *Como foi encontrado* e o *Resumo*) → **Inserir 2 colunas à esquerda**.
-2. Em **Q1** escreva `Responsável` e em **R1** escreva `COF Enviada`.
-3. Selecione a coluna Q → **Dados > Validação de dados > Menu suspenso** com o nome de cada vendedor.
-4. Selecione a coluna R → **Inserir > Caixa de seleção** *ou* menu suspenso com `Sim` e `Não`.
-
-O resumo anda duas colunas para a direita e as fórmulas dele se ajustam sozinhas. Enquanto as colunas não existirem, o painel mostra um aviso amarelo.
+| **Responsável** | **ranking de presenças** (e de leads na visão completa) | já existe |
+| **COF Enviada** | base do funil (100%) | já existe |
+| **Convite Enviado** | funil e fila "na mesa" (Sim/Não) | já existe |
+| **Presença Confirmada** | **meta: cada "Sim" = 1 ponto, de 100**; "Não" = recusa; vazio = aguardando resposta | já existe |
 
 **Regras**
 - **Tudo conta:** o painel considera **todas as linhas da planilha**, de qualquer data (desde maio), não só novembro.
-- **Meta (200):** linhas com **COF Enviada = Sim**. "Não" ou vazio não contam.
-- **Meta do dia:** (200 − COFs enviadas até ontem) ÷ dias que faltam até 15/11, contando hoje, arredondado para cima. "Enviadas hoje" = COF Enviada = Sim **com Data de envio = hoje**. Quando bate, toca uma buzina e aparece "META DO DIA BATIDA!".
-- **Empate:** quem tem o mesmo nº de leads divide a posição (1º, 1º, 3º) e aparece com o selo EMPATE.
-- **Ranking:** leads com **Responsável** preenchido. Desempate: mais COFs enviadas → mais vendas → mais qualificados → quem chegou primeiro.
-- Linha sem Responsável conta no total, mas não pontua para ninguém (o painel avisa quantas estão assim).
-- **Alertas na tela:** "NOVO LEAD NA COF!" quando a linha ganha um Responsável; "+1 NA META! COF ENVIADA" quando a COF Enviada vira Sim.
+- **Meta (100):** linhas com **Presença Confirmada = Sim**.
+- **Na mesa / fila de follow-up:** Convite Enviado = Sim **e** Presença Confirmada vazia. Quem respondeu "Não" sai da fila e conta como recusa.
+- **Ritmo necessário:** (100 − presenças) ÷ dias até o evento, contando hoje, arredondado para cima.
+- **Ranking de presenças:** só vendedores com pelo menos um convite. Desempate: mais convites → menos recusas → mais COFs. Quem tem o mesmo nº divide a posição (1º, 1º, 3º) e aparece com o selo EMPATE. A planilha não guarda *quando* a presença foi confirmada, por isso não há setas de subiu/caiu nem "hoje" nesse ranking.
+- Linha sem Responsável conta no total, mas não pontua para ninguém.
+- **Alertas na tela:** "PRESENÇA CONFIRMADA!" quando a coluna vira Sim; "CONVITE ENVIADO!" quando o convite vira Sim; "NOVO LEAD NA COF!" quando uma linha ganha Responsável. Marcos de 25/50/75 e a grande final nas 100 só disparam na virada, nunca ao abrir a tela.
 
 ## 2. Conectar a planilha
 
@@ -60,7 +60,8 @@ Funciona porque a planilha está compartilhada como *Qualquer pessoa com o link*
 ```
 GOOGLE_SHEET_ID=<trecho da URL entre /d/ e /edit>
 GOOGLE_SHEET_GID=0
-META_COF=200
+META_PRESENCA=100
+NEXT_PUBLIC_EVENT_AT=2026-11-27T19:00:00-03:00
 ```
 
 ⚠️ Não coloque esse ID em lugar público (repositório aberto, print, mensagem em grupo grande). Hoje a planilha está como **"Qualquer pessoa com o link: Editor"**: quem tiver o ID pode ver e alterar nome, e-mail e WhatsApp de todos os candidatos.
@@ -96,7 +97,7 @@ Na TV: abra o link e clique no botão de tela cheia (canto superior direito). O 
 
 | Arquivo | O quê |
 |---|---|
-| `src/lib/config.ts` | fim da contagem regressiva, dia da Black Friday, ordem das etapas do CRM, intervalo de atualização |
+| `src/lib/config.ts` | data do evento (contagem regressiva e ritmo), dia da Black Friday, ordem das etapas do CRM, intervalo de atualização |
 | `src/lib/sheets.ts` | leitura da planilha e nomes de colunas aceitos |
 | `src/lib/stats.ts` | cálculo de ranking, etapas e métricas |
 | `src/components/` | interface |

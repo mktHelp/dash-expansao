@@ -74,6 +74,11 @@ export function isYes(s: string): boolean {
   return !!n && !["nao", "n", "false", "0", "-", "falso"].includes(n);
 }
 
+/** Resposta negativa explícita ("Não", "n", "false"...). Vazio NÃO conta como não. */
+export function isNo(s: string): boolean {
+  return ["nao", "n", "false", "0", "falso"].includes(norm(s));
+}
+
 /** Interpreta datas da planilha como horário de Brasília (UTC-3). */
 export function parseBRDate(raw: string): number | null {
   const s = raw.trim();

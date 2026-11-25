@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Crown, Flag, Medal, Rocket, Star, Trophy } from "lucide-react";
+import { Crown, Flag, Medal, PhoneCall, Rocket, Star, Trophy } from "lucide-react";
 import type { RankRow, Stats } from "@/lib/stats";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
 
-export type Mvp = { name: string; cof: number } | null;
+export type Mvp = { name: string; presenca: number } | null;
 
-/** Quem mais enviou COF na campanha (destaque da grande final). */
+/** Quem mais confirmou presenças (destaque da grande final). */
 export function mvpOf(ranking: RankRow[]): Mvp {
-  const top = [...ranking].sort((a, b) => b.cof - a.cof || b.total - a.total)[0];
-  return top && top.cof > 0 ? { name: top.name, cof: top.cof } : null;
+  const top = [...ranking].sort((a, b) => b.presenca - a.presenca || b.convite - a.convite)[0];
+  return top && top.presenca > 0 ? { name: top.name, presenca: top.presenca } : null;
 }
 
 /** Número que sobe de 0 até `to` em `ms` milissegundos. */
@@ -31,8 +31,8 @@ function CountUp({ to, ms = 2500 }: { to: number; ms?: number }) {
   return <>{fmt(v)}</>;
 }
 
-/** Tela cheia da grande final (~15s) quando a meta de 200 é batida. */
-export function FinaleOverlay({ cof, goal, mvp, onDone }: { cof: number; goal: number; mvp: Mvp; onDone: () => void }) {
+/** Tela cheia da grande final (~15s) quando a meta de presenças é batida. */
+export function FinaleOverlay({ value, goal, mvp, onDone }: { value: number; goal: number; mvp: Mvp; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 15000);
     return () => clearTimeout(t);
@@ -53,12 +53,12 @@ export function FinaleOverlay({ cof, goal, mvp, onDone }: { cof: number; goal: n
         <p className="animate-pop gold-text mt-2 font-display text-[11rem] leading-none tracking-wide">META BATIDA!</p>
         <p className="animate-pop mt-2 flex items-baseline gap-4 font-display leading-none" style={{ animationDelay: "0.3s" }}>
           <span className="gold-text text-[9rem] tabular-nums">
-            <CountUp to={cof} />
+            <CountUp to={value} />
           </span>
-          <span className="text-6xl text-white/80">COFs ENVIADAS</span>
+          <span className="text-6xl text-white/80">PRESENÇAS CONFIRMADAS</span>
         </p>
         <p className="mt-4 flex items-center gap-3 text-2xl font-semibold uppercase tracking-[0.3em] text-white/80">
-          <Star className="text-[#ffd700]" size={22} /> meta da black: {fmt(goal)} <Star className="text-[#ffd700]" size={22} />
+          <Star className="text-[#ffd700]" size={22} /> meta da black: {fmt(goal)} presenças <Star className="text-[#ffd700]" size={22} />
         </p>
         {mvp && (
           <div
@@ -67,11 +67,11 @@ export function FinaleOverlay({ cof, goal, mvp, onDone }: { cof: number; goal: n
           >
             <Crown className="text-[#ffd700]" size={40} />
             <span className="font-display text-4xl tracking-wide text-white">
-              MVP: <span className="gold-text">{mvp.name}</span> · {fmt(mvp.cof)} COFs
+              MVP: <span className="gold-text">{mvp.name}</span> · {fmt(mvp.presenca)} presenças
             </span>
           </div>
         )}
-        <p className="mt-8 text-xl font-semibold text-white/70">Parabéns, time de expansão! 🚀</p>
+        <p className="mt-8 text-xl font-semibold text-white/70">Casa cheia! Parabéns, time de expansão! 🚀</p>
       </div>
     </div>
   );
@@ -79,28 +79,29 @@ export function FinaleOverlay({ cof, goal, mvp, onDone }: { cof: number; goal: n
 
 /** Painel da meta depois de batida (modo campeão): bônus e próximo marco. */
 export function ChampionHero({ stats, goal, mvp }: { stats: Stats; goal: number; mvp: Mvp }) {
-  const extra = Math.max(0, stats.cof - goal);
-  // próximo marco: de 50 em 50 acima da meta (250, 300…)
-  const next = goal + 50 * (Math.floor(extra / 50) + 1);
-  const prev = next - 50;
-  const pct = Math.min(100, Math.round(((stats.cof - prev) / 50) * 100));
+  const extra = Math.max(0, stats.presenca - goal);
+  // próximo marco: de 25 em 25 acima da meta (125, 150…)
+  const step = 25;
+  const next = goal + step * (Math.floor(extra / step) + 1);
+  const prev = next - step;
+  const pct = Math.min(100, Math.round(((stats.presenca - prev) / step) * 100));
 
   return (
-    <div className="champion-panel relative overflow-hidden rounded-2xl border-2 border-[#ffd700]/60 p-7">
+    <div className="champion-panel relative h-full overflow-hidden rounded-2xl border-2 border-[#ffd700]/60 p-7">
       <div className="sunburst pointer-events-none absolute -right-[20%] -top-[120%] size-[1400px] opacity-60" />
-      <div className="relative flex items-center justify-between gap-6">
+      <div className="relative flex h-full items-center justify-between gap-6">
         <div className="flex items-center gap-6">
           <Trophy className="animate-float shrink-0 text-[#ffd700] drop-shadow-[0_0_30px_rgba(255,215,0,0.8)]" size={150} strokeWidth={1.4} />
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.3em] text-[#fff3b0]">
-              <Flag size={16} /> Meta da Black batida!
+              <Flag size={16} /> Meta da Black batida · presenças confirmadas
             </p>
             <p className="mt-1 flex items-baseline gap-3 font-display leading-none">
-              <span className="gold-text text-[9rem] tabular-nums">{fmt(stats.cof)}</span>
+              <span className="gold-text text-[9rem] tabular-nums">{fmt(stats.presenca)}</span>
               <span className="text-6xl text-white/60">/ {fmt(goal)}</span>
             </p>
             <p className="mt-1 font-display text-3xl tracking-wide text-emerald-300">
-              {extra > 0 ? `+${fmt(extra)} além da meta` : "na conta! cada COF agora é bônus"}
+              {extra > 0 ? `+${fmt(extra)} além da meta` : "na conta! cada presença agora é bônus"}
             </p>
           </div>
         </div>
@@ -112,7 +113,7 @@ export function ChampionHero({ stats, goal, mvp }: { stats: Stats; goal: number;
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#fff3b0]">MVP da campanha</p>
                 <p className="font-display text-3xl tracking-wide text-white">
-                  {mvp.name} · <span className="gold-text">{fmt(mvp.cof)} COFs</span>
+                  {mvp.name} · <span className="gold-text">{fmt(mvp.presenca)} presenças</span>
                 </p>
               </div>
             </div>
@@ -122,13 +123,14 @@ export function ChampionHero({ stats, goal, mvp }: { stats: Stats; goal: number;
               <span className="flex items-center gap-1.5">
                 <Rocket size={14} /> Próximo marco: {fmt(next)}
               </span>
-              <span className="tracking-normal">faltam {fmt(next - stats.cof)}</span>
+              <span className="tracking-normal">faltam {fmt(next - stats.presenca)}</span>
             </p>
             <div className="mt-2 h-4 overflow-hidden rounded-full bg-zinc-800">
               <div className="gold-bar h-full rounded-full" style={{ width: `${pct}%` }} />
             </div>
             <p className="mt-2 text-sm text-zinc-300">
-              hoje <b className="text-white">{fmt(stats.cofToday)}</b> COFs · <b className="text-white">{fmt(stats.total)}</b> leads na planilha
+              <PhoneCall size={13} className="mr-1 inline text-red-400" />
+              <b className="text-white">{fmt(stats.aguardando)}</b> convidados ainda sem resposta
             </p>
           </div>
         </div>

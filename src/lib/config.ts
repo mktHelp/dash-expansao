@@ -7,8 +7,10 @@ export const CAMPAIGN_START = new Date(
   process.env.NEXT_PUBLIC_CAMPAIGN_START ?? "2026-11-05T00:00:00-03:00",
 ).getTime();
 
-export const CAMPAIGN_END = new Date(
-  process.env.NEXT_PUBLIC_CAMPAIGN_END ?? "2026-11-15T23:59:59-03:00",
+// EVENT_AT = data e hora do evento: a contagem regressiva e o ritmo de
+// presenças por dia ("faltam X ÷ dias até o evento") usam esta data.
+export const EVENT_AT = new Date(
+  process.env.NEXT_PUBLIC_EVENT_AT ?? "2026-11-27T19:00:00-03:00",
 ).getTime();
 
 // Dia da Black Friday (destacado no gráfico diário) — formato AAAA-MM-DD.

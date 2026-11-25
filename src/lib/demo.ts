@@ -61,9 +61,10 @@ export function demoRows(now: number): string[][] {
       month, date, NOMES[Math.floor(r(4) * NOMES.length)], "", "", cidade, uf,
       QUALIF[Math.floor(r(5) * QUALIF.length)], "", etapa, "", "", "", venda, "", "",
       r(8) < 0.04 ? "" : v, // alguns sem responsável, como acontece na vida real
-      r(9) < 0.7 ? "Sim" : "Não",
-      r(9) < 0.4 ? "Sim" : "", // convite só sai para quem recebeu COF
-      r(9) < 0.2 ? "Sim" : "", // e a presença, só para quem recebeu convite
+      "Sim", // toda linha da aba já é uma COF enviada
+      r(9) < 0.87 ? "Sim" : "Não", // convite
+      // presença: só para convidados; parte confirma, parte recusa, o resto aguarda
+      r(9) >= 0.87 ? "Não" : r(10) < 0.3 ? "Sim" : r(10) < 0.45 ? "Não" : "",
     ]);
   }
   return rows;

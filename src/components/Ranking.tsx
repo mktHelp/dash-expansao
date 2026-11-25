@@ -1,11 +1,14 @@
-import { ArrowDown, ArrowUp, Crown, Equal, Flame, Sparkles, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, Crown, Equal, Flame, Sparkles, Swords, Trophy } from "lucide-react";
 import { initials, type RankRow } from "@/lib/stats";
 
 const MEDAL = [
-  { ring: "ring-bf", bg: "bg-bf text-ink", label: "text-bf", height: "min-h-40 sm:min-h-48" },
-  { ring: "ring-zinc-300", bg: "bg-zinc-300 text-ink", label: "text-zinc-200", height: "min-h-32 sm:min-h-36" },
-  { ring: "ring-amber-700", bg: "bg-amber-700 text-white", label: "text-amber-500", height: "min-h-28 sm:min-h-32" },
+  { ring: "ring-bf", bg: "bg-bf text-ink", label: "text-bf", height: "min-h-40 sm:min-h-44", compact: "min-h-36" },
+  { ring: "ring-zinc-300", bg: "bg-zinc-300 text-ink", label: "text-zinc-200", height: "min-h-32 sm:min-h-36", compact: "min-h-32" },
+  { ring: "ring-amber-700", bg: "bg-amber-700 text-white", label: "text-amber-500", height: "min-h-28 sm:min-h-32", compact: "min-h-28" },
 ];
+
+/** "presenca" = tela da campanha (conta presenças confirmadas); "leads" = visão completa. */
+export type RankingMode = "presenca" | "leads";
 
 function Delta({ delta }: { delta: number | null }) {
   if (delta == null)
@@ -14,7 +17,7 @@ function Delta({ delta }: { delta: number | null }) {
         <Sparkles size={10} /> novo
       </span>
     );
-  if (delta === 0) return <span className="text-xs text-zinc-600">—</span>;
+  if (delta === 0) return null;
   const up = delta > 0;
   return (
     <span
@@ -45,24 +48,38 @@ function OnFire({ today }: { today: number }) {
   );
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** Colado no líder (a 1 ou 2 de distância): a disputa está aberta. */
+function Chasing({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="inline-flex animate-pulse items-center gap-0.5 rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-black uppercase text-red-300 ring-1 ring-red-400/40">
+      <Swords size={11} /> na cola
+    </span>
+  );
+}
 
-/** "+2 hoje · 3 convites · 1 presença" (campanha) ou "+2 hoje · 3 COF · 1 qualif." (completo) */
-function Details({ row, cofOnly, strong }: { row: RankRow; cofOnly: boolean; strong: string }) {
-  if (cofOnly)
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const rate = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+
+/** "84 convites · 49 na fila · 24% confirmam" (campanha) ou "+2 hoje · 3 presenças · 1 qualif." (completo) */
+function Details({ row, mode, strong }: { row: RankRow; mode: RankingMode; strong: string }) {
+  if (mode === "presenca")
     return (
       <>
-        +{row.valueToday} hoje · <b className="text-sky-300">{plural(row.convite, "convite", "convites")}</b> ·{" "}
-        <b className="text-emerald-400">{plural(row.presenca, "presença", "presenças")}</b>
+        <b className="text-sky-300">{plural(row.convite, "convite", "convites")}</b> ·{" "}
+        <b className="text-red-400">{row.aguardando} na fila</b> · {rate(row.presenca, row.convite)}% confirmam
       </>
     );
   return (
     <>
-      +{row.today} hoje · <b className={strong}>{row.cof} COF</b> · {row.qualified} qualif.
+      +{row.today} hoje · <b className={strong}>{plural(row.presenca, "presença", "presenças")}</b> · {row.qualified} qualif.
       {row.won > 0 ? ` · ${plural(row.won, "venda", "vendas")}` : ""}
     </>
   );
 }
+
+const unit = (mode: RankingMode, n: number) =>
+  mode === "presenca" ? (n === 1 ? "presença" : "presenças") : n === 1 ? "lead" : "leads";
 
 function Podium({
   row,
@@ -70,51 +87,58 @@ function Podium({
   highlight,
   gap,
   tiedWith,
-  cofOnly,
+  chasing,
+  mode,
+  compact,
 }: {
   row: RankRow;
   idx: number;
   highlight: boolean;
   gap: number | null;
   tiedWith: string | null; // nome de quem está empatado com ele (se houver)
-  cofOnly: boolean;
+  chasing: boolean;
+  mode: RankingMode;
+  compact: boolean; // TV: avatar menor e pódio mais baixo para caber na tela
 }) {
   // cor/altura pela posição: empatados ficam iguais (ex.: dois 1º lugares)
   const m = MEDAL[Math.min(row.position, 3) - 1];
   return (
     <div className={`flex flex-1 flex-col items-center ${idx === 0 ? "order-2" : idx === 1 ? "order-1" : "order-3"}`}>
-      {row.position === 1 && <Crown className="mb-1 text-bf drop-shadow-[0_0_12px_rgba(248,190,25,0.8)]" size={34} />}
+      {row.position === 1 && (
+        <Crown className="mb-1 text-bf drop-shadow-[0_0_12px_rgba(248,190,25,0.8)]" size={compact ? 26 : 34} />
+      )}
       <div
-        className={`grid size-16 place-items-center rounded-full bg-zinc-900 font-display text-2xl ring-4 sm:size-20 sm:text-3xl ${m.ring} ${highlight ? "animate-flash" : ""}`}
+        className={`grid place-items-center rounded-full bg-zinc-900 font-display ring-4 ${
+          compact ? "size-14 text-2xl" : "size-16 text-2xl sm:size-20 sm:text-3xl"
+        } ${m.ring} ${highlight ? "animate-flash" : ""}`}
       >
         {initials(row.name)}
       </div>
-      <p className="mt-2 max-w-full truncate text-center text-sm font-bold sm:text-base">{row.name}</p>
-      <div className="mt-0.5 flex items-center gap-1.5">
+      <p className={`max-w-full truncate text-center font-bold ${compact ? "mt-1 text-lg" : "mt-2 text-sm sm:text-lg"}`}>{row.name}</p>
+      <div className="mt-0.5 flex min-h-5 items-center gap-1.5">
         <Tie show={!!tiedWith} />
+        <Chasing show={chasing && !tiedWith} />
         <Delta delta={row.delta} />
         <OnFire today={row.valueToday} />
       </div>
       <div
-        className={`mt-2 flex w-full flex-col items-center justify-start rounded-t-xl pt-3 pb-2 ${m.height} ${
+        className={`mt-2 flex w-full flex-col items-center justify-start rounded-t-xl pb-2 ${compact ? `pt-2 ${m.compact}` : `pt-3 ${m.height}`} ${
           row.position === 1 ? "bg-gradient-to-b from-bf/30 to-bf/5" : "bg-gradient-to-b from-zinc-700/40 to-zinc-800/10"
         }`}
       >
-        <span className={`font-display text-5xl leading-none sm:text-6xl ${m.label}`}>{row.value}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
-          {cofOnly ? (row.value === 1 ? "COF enviada" : "COFs enviadas") : "leads"}
-        </span>
-        <span className={`mt-2 rounded-full px-2.5 py-0.5 text-base font-black ${m.bg}`}>{row.position}º</span>
-        <span className="mt-1.5 text-center text-[11px] text-zinc-500">
-          <Details row={row} cofOnly={cofOnly} strong="text-bf" />
+        <span className={`font-display text-6xl leading-none sm:text-7xl ${m.label}`}>{row.value}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">{unit(mode, row.value)}</span>
+        <span className={`rounded-full px-2.5 py-0.5 text-base font-black ${compact ? "mt-1" : "mt-2"} ${m.bg}`}>{row.position}º</span>
+        <span className="mt-1.5 px-1 text-center text-xs text-zinc-400">
+          <Details row={row} mode={mode} strong="text-bf" />
         </span>
         {tiedWith ? (
-          <span className="mt-0.5 px-1 text-center text-[11px] font-semibold text-sky-200">
+          <span className="mt-0.5 px-1 text-center text-xs font-semibold text-sky-200">
             empatado com {tiedWith.split(" ")[0]}
           </span>
         ) : (
           gap != null && (
-            <span className="mt-0.5 px-1 text-center text-[11px] text-zinc-400">
+            <span className="mt-0.5 px-1 text-center text-xs text-zinc-300">
               faltam <b className="text-bf">{gap}</b> p/ o {row.position - 1}º
             </span>
           )
@@ -129,13 +153,15 @@ export default function Ranking({
   highlight,
   hasColumn,
   className = "",
-  cofOnly = false,
+  mode = "leads",
+  compact = false,
 }: {
   rows: RankRow[];
   highlight: string | null;
   hasColumn: boolean;
   className?: string;
-  cofOnly?: boolean; // tela da campanha: só COF, sem qualificados
+  mode?: RankingMode;
+  compact?: boolean;
 }) {
   const leader = rows[0];
   const top = rows.slice(0, 3);
@@ -146,18 +172,23 @@ export default function Ranking({
     const other = rows.find((o, j) => j !== i && o.value === rows[i].value);
     return other ? other.name : null;
   };
+  const lead = leader && rows[1] ? leader.value - rows[1].value : 0;
 
   return (
     <div className={`panel p-4 sm:p-5 ${className}`}>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-display text-2xl tracking-wide sm:text-3xl">
-          <Trophy className="text-bf" size={26} /> RANKING DE VENDEDORES
+          <Trophy className="text-bf" size={26} /> {mode === "presenca" ? "RANKING DE PRESENÇAS" : "RANKING DE VENDEDORES"}
         </h2>
         {leader && rows[1] && (
-          <span className="rounded-full border border-bf/40 bg-bf/10 px-3 py-1 text-xs font-semibold text-bf">
-            {leader.value === rows[1].value
+          <span
+            className={`rounded-full border px-3 py-1 text-sm font-bold ${
+              lead <= 2 ? "border-red-400/50 bg-red-500/15 text-red-200" : "border-bf/40 bg-bf/10 text-bf"
+            }`}
+          >
+            {lead === 0
               ? "EMPATE NA LIDERANÇA!"
-              : `${leader.name.split(" ")[0]} lidera por ${leader.value - rows[1].value}${cofOnly ? (leader.value - rows[1].value === 1 ? " COF" : " COFs") : ""}`}
+              : `${leader.name.split(" ")[0]} lidera por ${lead}${mode === "presenca" ? ` ${unit(mode, lead)}` : ""}${lead <= 2 ? " · tá apertado!" : ""}`}
           </span>
         )}
       </div>
@@ -169,8 +200,8 @@ export default function Ranking({
               <>
                 <p className="font-display text-3xl text-bf">PISTA LIVRE!</p>
                 <p className="text-zinc-400">
-                  {cofOnly
-                    ? "Nenhuma COF enviada ainda — a primeira assume a liderança."
+                  {mode === "presenca"
+                    ? "Nenhuma presença confirmada ainda — a primeira assume a liderança."
                     : "Nenhum lead ainda — o primeiro a cadastrar assume a liderança."}
                 </p>
               </>
@@ -195,7 +226,9 @@ export default function Ranking({
                 highlight={highlight === r.key}
                 gap={i > 0 ? rows[i - 1].value - r.value + 1 : null}
                 tiedWith={tieOf(i)}
-                cofOnly={cofOnly}
+                chasing={r.position > 1 && leader.value - r.value <= 2 && r.value > 0}
+                mode={mode}
+                compact={compact}
               />
             ))}
           </div>
@@ -238,7 +271,7 @@ export default function Ranking({
                             faltam <b className="text-bf">{gap}</b> para passar {above.name.split(" ")[0]}
                           </>
                         )}{" "}
-                        · <Details row={r} cofOnly={cofOnly} strong="text-zinc-300" />
+                        · <Details row={r} mode={mode} strong="text-zinc-300" />
                       </p>
                     </div>
                     <span className="font-display text-3xl tabular-nums">{r.value}</span>

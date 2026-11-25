@@ -1,16 +1,46 @@
 import { useEffect } from "react";
-import { BadgeCheck, CalendarDays, Megaphone, Clock, Send, UserCheck, Filter, Flame, MapPin, Radio, Target, TrendingDown, TrendingUp, TriangleAlert, Users, Zap } from "lucide-react";
-import { BLACK_FRIDAY_DAY, CAMPAIGN_END, LOST_STAGE, STAGES } from "@/lib/config";
+import {
+  BadgeCheck,
+  CalendarDays,
+  ChevronRight,
+  Clock,
+  Filter,
+  Flame,
+  FileCheck2,
+  MapPin,
+  Megaphone,
+  PhoneCall,
+  Radio,
+  Send,
+  Target,
+  TriangleAlert,
+  UserCheck,
+  UserX,
+  Users,
+  Zap,
+} from "lucide-react";
+import { BLACK_FRIDAY_DAY, EVENT_AT, LOST_STAGE, STAGES } from "@/lib/config";
 import { dayKey, isQualified, timeAgo, type Stats } from "@/lib/stats";
 import type { Lead, LeadsPayload } from "@/lib/types";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
+const pctOf = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+const plural = (n: number, one: string, many: string) => `${fmt(n)} ${n === 1 ? one : many}`;
+
+/** "27/11 · 19h" */
+function eventLabel() {
+  const k = dayKey(EVENT_AT);
+  const hm = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
+    .format(EVENT_AT)
+    .replace(":00", "h")
+    .replace(":", "h");
+  return `${k.slice(8)}/${k.slice(5, 7)} · ${hm}`;
+}
 
 // ---------------- Countdown ----------------
 export function Countdown({ now }: { now: number }) {
-  const left = now ? Math.max(0, CAMPAIGN_END - now) : null;
-  if (left === 0)
-    return <div className="font-display text-2xl tracking-wide text-bf">CAMPANHA ENCERRADA</div>;
+  const left = now ? Math.max(0, EVENT_AT - now) : null;
+  if (left === 0) return <div className="font-display text-2xl tracking-wide text-bf">O EVENTO COMEÇOU!</div>;
   const parts =
     left == null
       ? ["--", "--", "--", "--"]
@@ -24,9 +54,9 @@ export function Countdown({ now }: { now: number }) {
   return (
     <div className="flex items-center gap-2">
       <span className="hidden text-right text-[10px] font-semibold uppercase leading-tight tracking-widest text-zinc-400 sm:block">
-        termina
+        evento
         <br />
-        {dayKey(CAMPAIGN_END).slice(8)}/{dayKey(CAMPAIGN_END).slice(5, 7)}
+        <span className="text-bf">{eventLabel()}</span>
       </span>
       {parts.map((p, i) => (
         <div key={labels[i]} className="flex w-12 flex-col items-center rounded-lg border border-bf/30 bg-bf/10 py-1 sm:w-14">
@@ -62,7 +92,285 @@ export function LiveBadge({ now, fetchedAt, error, demo }: { now: number; fetche
   );
 }
 
-// ---------------- KPIs ----------------
+function MissingColumn({ name }: { name: string }) {
+  return (
+    <span className="text-amber-400">
+      <TriangleAlert size={14} className="mr-1 inline" />
+      crie a coluna &quot;{name}&quot; (Sim/Não) na planilha
+    </span>
+  );
+}
+
+// ---------------- Meta de presenças em destaque (tela da campanha) ----------------
+export function PresenceHero({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
+  const pct = Math.min(100, pctOf(stats.presenca, goal));
+  const left = Math.max(0, goal - stats.presenca);
+  const marks = [0.25, 0.5, 0.75];
+  return (
+    <div className="panel relative flex h-full flex-col overflow-hidden border-bf/60 p-6 shadow-[0_0_60px_rgba(248,190,25,0.12)]">
+      <div className="absolute inset-x-0 top-0 h-1.5 bg-bf" />
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.3em] text-zinc-300">
+            <UserCheck size={18} className="text-bf" /> Meta da Black · Presenças confirmadas
+          </p>
+          <p className="mt-1 flex items-baseline gap-4 font-display leading-[0.85]">
+            <span className="glow-text text-[11rem] tabular-nums text-bf">{columns.presenca ? fmt(stats.presenca) : "—"}</span>
+            <span className="text-7xl text-zinc-500">/ {fmt(goal)}</span>
+          </p>
+        </div>
+        {left > 0 && stats.daysLeft > 0 && (
+          <div className="rounded-2xl border border-bf/40 bg-bf/10 px-6 py-4 text-right">
+            <p className="flex items-center justify-end gap-1.5 text-xs font-bold uppercase tracking-[0.3em] text-bf">
+              <Zap size={14} /> Ritmo necessário
+            </p>
+            <p className="font-display leading-none text-white">
+              <span className="text-[6.5rem] tabular-nums">{fmt(stats.dailyNeed)}</span>
+              <span className="ml-2 text-4xl text-zinc-400">/dia</span>
+            </p>
+            <p className="text-sm font-semibold text-zinc-300">
+              {stats.daysLeft === 1 ? <b className="text-bf">ÚLTIMO DIA!</b> : `${stats.daysLeft} dias até o evento`}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="relative mt-4">
+        <div className="h-11 overflow-hidden rounded-full bg-zinc-800 ring-1 ring-bf/30">
+          {/* wrapper separado: a barra cresce (animate-bar) e as listras correm (hazard) */}
+          <div className="animate-bar h-full" style={{ width: `${pct}%` }}>
+            <div className="hazard h-full rounded-full shadow-[0_0_30px_rgba(248,190,25,0.6)]" />
+          </div>
+        </div>
+        {marks.map((m) => (
+          <div key={m} className="absolute top-0 h-11" style={{ left: `${m * 100}%` }}>
+            <div className="h-full w-0.5 bg-zinc-950/70" />
+            <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 text-xs font-bold tabular-nums text-zinc-500">
+              {fmt(Math.round(goal * m))}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-baseline gap-x-8 gap-y-2 pt-6 text-lg text-zinc-300">
+        {!columns.presenca ? (
+          <MissingColumn name="Presença Confirmada" />
+        ) : left === 0 ? (
+          <span className="font-display text-4xl text-bf">META BATIDA! 🎉</span>
+        ) : (
+          <span className="flex items-baseline gap-2">
+            faltam <b className="font-display text-6xl leading-none text-bf">{fmt(left)}</b>
+            <span className="font-display text-3xl tracking-wide text-white">PRESENÇAS</span>
+          </span>
+        )}
+        <span className="flex items-baseline gap-2">
+          <b className="font-display text-5xl leading-none text-white">{pct}%</b> da meta
+        </span>
+        <span className="flex items-baseline gap-2">
+          <Send size={18} className="self-center text-sky-300" />
+          <b className="font-display text-4xl leading-none text-sky-300">{pctOf(stats.presenca, stats.convite)}%</b>
+          dos convidados confirmaram
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Na mesa: convidados sem resposta ----------------
+export function HotQueue({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
+  const left = Math.max(0, goal - stats.presenca);
+  const need = pctOf(left, stats.aguardando);
+  const short = left > stats.aguardando; // nem a fila inteira fecha a meta
+  return (
+    <div className="hot-panel relative flex h-full flex-col overflow-hidden rounded-2xl border-2 border-red-500/60 p-6">
+      <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.3em] text-red-200">
+        <PhoneCall size={18} className="animate-ring text-red-400" /> Na mesa · sem resposta
+      </p>
+      <p className="mt-1 font-display text-[10rem] leading-[0.85] tabular-nums text-red-400 drop-shadow-[0_0_30px_rgba(239,68,68,0.55)]">
+        {columns.presenca ? fmt(stats.aguardando) : "—"}
+      </p>
+      <p className="font-display text-3xl tracking-wide text-white">CONVIDADOS ESPERANDO LIGAÇÃO</p>
+      <div className="mt-auto rounded-xl bg-black/50 px-4 py-3 text-base text-zinc-200">
+        {left === 0 ? (
+          <>Meta batida — cada confirmação agora é <b className="text-bf">bônus</b>!</>
+        ) : short ? (
+          <>
+            A fila não fecha a meta: faltam <b className="text-bf">{fmt(left - stats.aguardando)}</b> convites a mais
+          </>
+        ) : (
+          <>
+            Virar <b className="font-display text-3xl text-bf">{fmt(left)}</b> deles ={" "}
+            <b className="font-display text-3xl text-bf">{need}%</b> da fila
+            <span className="block text-sm font-bold uppercase tracking-[0.25em] text-red-300">cada ligação conta</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------- Funil de conversão: COF → convite → presença ----------------
+function FunnelStep({
+  icon,
+  label,
+  value,
+  note,
+  color,
+  border,
+  big,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  note: React.ReactNode;
+  color: string;
+  border: string;
+  big?: boolean;
+}) {
+  return (
+    <div className={`flex min-w-0 flex-1 items-center gap-4 rounded-xl border bg-zinc-900/70 px-5 py-2 ${border}`}>
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">
+          {icon} {label}
+        </p>
+        <p className="mt-0.5 text-sm text-zinc-400">{note}</p>
+      </div>
+      <span className={`ml-auto font-display leading-none tabular-nums ${big ? "text-7xl" : "text-6xl"} ${color}`}>{fmt(value)}</span>
+    </div>
+  );
+}
+
+function Rate({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="flex shrink-0 flex-col items-center px-1">
+      <span className="font-display text-3xl leading-none text-white">{value}%</span>
+      <ChevronRight size={28} className="-my-1 text-bf" strokeWidth={3} />
+      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{label}</span>
+    </div>
+  );
+}
+
+export function ConversionFunnel({ stats, columns }: { stats: Stats; columns: LeadsPayload["columns"] }) {
+  return (
+    <div className="panel flex items-stretch gap-3 p-3">
+      <FunnelStep
+        icon={<FileCheck2 size={14} className="text-zinc-300" />}
+        label="COFs enviadas"
+        value={stats.cof}
+        note={<>base · <b className="text-white">100%</b></>}
+        color="text-white"
+        border="border-line"
+      />
+      <Rate value={pctOf(stats.convite, stats.cof)} label="convidados" />
+      <FunnelStep
+        icon={<Send size={14} className="text-sky-300" />}
+        label="Convites enviados"
+        value={columns.convite ? stats.convite : 0}
+        note={
+          columns.convite ? (
+            <>{stats.semConvite > 0 ? `${plural(stats.semConvite, "COF", "COFs")} sem convite` : "todas as COFs convidadas"}</>
+          ) : (
+            <MissingColumn name="Convite Enviado" />
+          )
+        }
+        color="text-sky-300"
+        border="border-sky-400/40"
+      />
+      <Rate value={pctOf(stats.presenca, stats.convite)} label="confirmam" />
+      <FunnelStep
+        icon={<UserCheck size={14} className="text-bf" />}
+        label="Presenças"
+        value={stats.presenca}
+        note={
+          <>
+            <b className="text-white">{pctOf(stats.presenca, stats.cof)}%</b> das COFs ·{" "}
+            <UserX size={12} className="mb-0.5 inline text-zinc-500" /> {plural(stats.recusas, "recusa", "recusas")}
+          </>
+        }
+        color="text-bf glow-text"
+        border="border-bf/60"
+        big
+      />
+    </div>
+  );
+}
+
+// ---------------- Fila de follow-up por vendedor ----------------
+export function FollowUpQueue({ rows, className = "" }: { rows: Stats["presencaRanking"]; className?: string }) {
+  const list = [...rows].filter((r) => r.convite > 0).sort((a, b) => b.aguardando - a.aguardando);
+  const max = Math.max(1, ...list.map((r) => r.aguardando));
+  return (
+    <div className={`panel p-5 ${className}`}>
+      <h2 className="mb-3 flex items-center justify-between gap-2 font-display text-2xl tracking-wide">
+        <span className="flex items-center gap-2">
+          <PhoneCall size={20} className="text-red-400" /> FILA DE FOLLOW-UP
+        </span>
+        <span className="font-sans text-xs font-semibold normal-case tracking-normal text-zinc-400">sem resposta</span>
+      </h2>
+      {list.length === 0 ? (
+        <p className="text-sm text-zinc-500">Ninguém com convite enviado ainda.</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {list.map((r) => (
+            <li key={r.key}>
+              <div className="flex items-baseline justify-between">
+                <span className="text-base font-bold">{r.name}</span>
+                <span className="text-sm text-zinc-400">
+                  <b className="font-display text-3xl text-red-400">{fmt(r.aguardando)}</b> na fila
+                </span>
+              </div>
+              <div className="mt-1 h-3 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="animate-bar h-full rounded-full bg-gradient-to-r from-red-600 to-orange-400"
+                  style={{ width: `${(r.aguardando / max) * 100}%` }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------- Presenças confirmadas (lista) ----------------
+export function ConfirmedList({ leads, className = "" }: { leads: Lead[]; className?: string }) {
+  return (
+    <div className={`panel overflow-hidden p-5 ${className}`}>
+      <h2 className="mb-2 flex items-center gap-2 font-display text-2xl tracking-wide">
+        <BadgeCheck size={20} className="text-bf" /> CONFIRMADOS
+      </h2>
+      {leads.length === 0 ? (
+        <p className="text-sm text-zinc-500">A primeira presença confirmada aparece aqui.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {leads.map((l) => (
+            <li key={l.id} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">
+                  {l.nome}
+                  <span className="font-normal text-zinc-500"> · {[l.cidade, l.uf].filter(Boolean).join("/") || "—"}</span>
+                </p>
+                <p className="truncate text-xs text-zinc-400">
+                  {l.vendedor ? (
+                    <>
+                      por <b className="text-bf">{l.vendedor}</b>
+                    </>
+                  ) : (
+                    <span className="text-amber-400">Sem Responsável</span>
+                  )}
+                </p>
+              </div>
+              <UserCheck size={16} className="shrink-0 text-bf" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------- KPIs (visão completa) ----------------
 function Kpi({ icon, label, value, children, accent }: { icon: React.ReactNode; label: string; value: React.ReactNode; children?: React.ReactNode; accent?: boolean }) {
   return (
     <div className={`panel relative overflow-hidden p-4 ${accent ? "border-bf/50" : ""}`}>
@@ -77,13 +385,12 @@ function Kpi({ icon, label, value, children, accent }: { icon: React.ReactNode; 
 }
 
 export function Kpis({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
-  const pct = Math.min(100, Math.round((stats.cof / goal) * 100));
-  const diff = stats.today - stats.yesterday;
+  const pct = Math.min(100, pctOf(stats.presenca, goal));
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <Kpi icon={<Zap size={14} className="text-bf" />} label="Leads em COF" value={fmt(stats.total)} accent>
+      <Kpi icon={<Zap size={14} className="text-bf" />} label="Leads em COF" value={fmt(stats.total)}>
         <Users size={12} className="mr-1 inline" />
-        {stats.ranking.length} vendedores na disputa
+        {stats.ranking.length} vendedores · {fmt(stats.cof)} COFs enviadas
         {stats.unassigned > 0 && (
           <span className="mt-0.5 block text-amber-400">
             <TriangleAlert size={12} className="mr-1 inline" />
@@ -91,245 +398,48 @@ export function Kpis({ stats, goal, columns }: { stats: Stats; goal: number; col
           </span>
         )}
       </Kpi>
-      <Kpi icon={<Flame size={14} className="text-orange-400" />} label="Hoje" value={fmt(stats.today)}>
-        {stats.hasYesterday ? (
-          <>
-            <span className={diff >= 0 ? "text-emerald-400" : "text-red-400"}>
-              {diff >= 0 ? <TrendingUp size={12} className="mr-1 inline" /> : <TrendingDown size={12} className="mr-1 inline" />}
-              {diff >= 0 ? "+" : ""}
-              {diff}
-            </span>{" "}
-            vs ontem ({stats.yesterday})
-          </>
-        ) : (
-          <span className="text-bf">1º dia da corrida — largada!</span>
-        )}
+      <Kpi icon={<Send size={14} className="text-sky-300" />} label="Convites enviados" value={columns.convite ? fmt(stats.convite) : "—"}>
+        <b className="text-white">{pctOf(stats.convite, stats.cof)}%</b> das COFs ·{" "}
+        <PhoneCall size={12} className="mr-0.5 inline text-red-400" />
+        <b className="text-red-400">{fmt(stats.aguardando)}</b> sem resposta
       </Kpi>
       <Kpi icon={<BadgeCheck size={14} className="text-emerald-400" />} label="Qualificados" value={fmt(stats.qualified)}>
-        {stats.total ? Math.round((stats.qualified / stats.total) * 100) : 0}% dos leads · {stats.won}{" "}
+        {pctOf(stats.qualified, stats.total)}% dos leads · {stats.won}{" "}
         {stats.won === 1 ? "venda efetivada" : "vendas efetivadas"}
       </Kpi>
       <div className="panel relative overflow-hidden border-bf/50 p-4">
         <div className="absolute inset-x-0 top-0 h-1 bg-bf" />
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-zinc-400">
-          <Target size={14} className="text-bf" /> Meta: COF enviadas
+          <Target size={14} className="text-bf" /> Meta: presenças confirmadas
         </div>
         <div className="mt-1 flex items-baseline gap-2">
-          <span className="glow-text font-display text-5xl leading-tight tabular-nums text-bf">{fmt(stats.cof)}</span>
+          <span className="glow-text font-display text-5xl leading-tight tabular-nums text-bf">{fmt(stats.presenca)}</span>
           <span className="font-display text-2xl text-zinc-400">/ {fmt(goal)}</span>
           <span className="ml-auto font-display text-2xl tabular-nums">{pct}%</span>
         </div>
         <div className="mt-2 h-3 overflow-hidden rounded-full bg-zinc-800">
-          {/* wrapper separado: a barra cresce (animate-bar) e as listras correm (hazard) */}
           <div className="animate-bar h-full" style={{ width: `${pct}%` }}>
             <div className="hazard h-full rounded-full" />
           </div>
         </div>
         <div className="mt-1 text-xs text-zinc-400">
-          {!columns.cofEnviada ? (
-            <span className="text-amber-400">
-              <TriangleAlert size={12} className="mr-1 inline" />
-              crie a coluna &quot;COF Enviada&quot; (Sim/Não) na planilha
-            </span>
-          ) : stats.cof >= goal ? (
+          {!columns.presenca ? (
+            <MissingColumn name="Presença Confirmada" />
+          ) : stats.presenca >= goal ? (
             "META BATIDA! 🎉"
           ) : (
-            `faltam ${fmt(goal - stats.cof)} COFs enviadas`
+            <>
+              faltam {fmt(goal - stats.presenca)} · {pctOf(stats.presenca, stats.convite)}% dos convites confirmaram ·{" "}
+              {plural(stats.recusas, "recusa", "recusas")}
+            </>
           )}
-          <span className="mt-0.5 block">
-            <Send size={12} className="mr-1 inline text-sky-300" />
-            <b className="text-sky-300">{fmt(stats.convite)}</b> convites ·{" "}
-            <UserCheck size={12} className="mr-1 inline text-emerald-400" />
-            <b className="text-emerald-400">{fmt(stats.presenca)}</b> presenças
-          </span>
         </div>
       </div>
     </div>
   );
 }
 
-// ---------------- Meta do dia ----------------
-export function DailyGoal({ stats }: { stats: Stats }) {
-  const { cofToday, dailyGoal, daysLeft } = stats;
-  const met = dailyGoal > 0 && cofToday >= dailyGoal;
-  const pct = dailyGoal > 0 ? Math.min(100, Math.round((cofToday / dailyGoal) * 100)) : 100;
-  return (
-    <div
-      className={`w-full rounded-2xl border p-4 sm:w-[26rem] ${
-        met ? "border-emerald-400/70 bg-emerald-500/10" : "border-bf/40 bg-bf/5"
-      }`}
-    >
-      <p className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-zinc-400">
-        <span className="flex items-center gap-1.5">
-          <CalendarDays size={14} className={met ? "text-emerald-400" : "text-bf"} /> Meta de hoje
-        </span>
-        <span className="tracking-normal normal-case">
-          {daysLeft === 1 ? "último dia!" : `${daysLeft} dias restantes`}
-        </span>
-      </p>
-      <p className="mt-1 flex items-baseline gap-2 font-display leading-none">
-        <span className={`text-7xl tabular-nums ${met ? "text-emerald-400" : "text-bf"}`}>{fmt(cofToday)}</span>
-        <span className="text-4xl text-zinc-500">/ {fmt(dailyGoal)}</span>
-      </p>
-      <div className="mt-3 h-3 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={`animate-bar h-full rounded-full ${met ? "bg-emerald-400" : "bg-bf"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <p className="mt-2 text-sm text-zinc-400">
-        {met ? (
-          <b className="font-display text-xl tracking-wide text-emerald-400">META DO DIA BATIDA! 📣</b>
-        ) : (
-          <>
-            faltam <b className="font-display text-xl text-bf">{fmt(dailyGoal - cofToday)}</b> COFs hoje
-          </>
-        )}
-      </p>
-    </div>
-  );
-}
-
-// ---------------- Convites e presenças ----------------
-function StatusTile({
-  icon,
-  label,
-  value,
-  hasColumn,
-  column,
-  color,
-  border,
-  children,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  hasColumn: boolean;
-  column: string;
-  color: string;
-  border: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={`flex min-w-52 flex-1 flex-col rounded-2xl border bg-zinc-900/60 p-4 ${border}`}>
-      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-        {icon} {label}
-      </p>
-      <p className={`mt-1 font-display text-7xl leading-none tabular-nums ${hasColumn ? color : "text-zinc-600"}`}>
-        {hasColumn ? fmt(value) : "—"}
-      </p>
-      <p className="mt-auto pt-2 text-sm text-zinc-400">
-        {hasColumn ? (
-          children
-        ) : (
-          <span className="text-amber-400">
-            <TriangleAlert size={13} className="mr-1 inline" />
-            crie a coluna &quot;{column}&quot;
-          </span>
-        )}
-      </p>
-    </div>
-  );
-}
-
-const pctOf = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
-
-export function StatusTiles({ stats, columns }: { stats: Stats; columns: LeadsPayload["columns"] }) {
-  return (
-    <div className="flex flex-1 items-stretch gap-4 self-stretch xl:max-w-xl">
-      <StatusTile
-        icon={<Send size={14} className="text-sky-300" />}
-        label="Convites enviados"
-        value={stats.convite}
-        hasColumn={columns.convite}
-        column="Convite Enviado"
-        color="text-sky-300"
-        border="border-sky-400/30"
-      >
-        <b className="text-white">{pctOf(stats.convite, stats.cof)}%</b> das COFs enviadas
-      </StatusTile>
-      <StatusTile
-        icon={<UserCheck size={14} className="text-emerald-400" />}
-        label="Presenças confirmadas"
-        value={stats.presenca}
-        hasColumn={columns.presenca}
-        column="Presença Confirmada"
-        color="text-emerald-400"
-        border="border-emerald-400/30"
-      >
-        <b className="text-white">{pctOf(stats.presenca, stats.convite)}%</b> dos convites
-      </StatusTile>
-    </div>
-  );
-}
-
-// ---------------- Meta em destaque (visão simples) ----------------
-export function GoalHero({ stats, goal, columns }: { stats: Stats; goal: number; columns: LeadsPayload["columns"] }) {
-  const pct = Math.min(100, Math.round((stats.cof / goal) * 100));
-  const left = Math.max(0, goal - stats.cof);
-  const marks = [0.25, 0.5, 0.75];
-  return (
-    <div className="panel relative overflow-hidden border-bf/50 p-5 sm:p-7">
-      <div className="absolute inset-x-0 top-0 h-1 bg-bf" />
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="mr-auto">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-zinc-400 sm:text-sm">
-            <Target size={16} className="text-bf" /> Meta da Black · COFs enviadas
-          </p>
-          <p className="mt-1 flex items-baseline gap-3 font-display leading-none">
-            <span className="glow-text text-8xl tabular-nums text-bf sm:text-[9rem]">{fmt(stats.cof)}</span>
-            <span className="text-4xl text-zinc-500 sm:text-6xl">/ {fmt(goal)}</span>
-            <span className="ml-2 text-4xl tabular-nums text-white sm:text-6xl">{pct}%</span>
-          </p>
-        </div>
-        <StatusTiles stats={stats} columns={columns} />
-        {stats.daysLeft > 0 && <DailyGoal stats={stats} />}
-      </div>
-
-      <div className="relative mt-5">
-        <div className="h-7 overflow-hidden rounded-full bg-zinc-800 sm:h-9">
-          {/* wrapper separado: a barra cresce (animate-bar) e as listras correm (hazard) */}
-          <div className="animate-bar h-full" style={{ width: `${pct}%` }}>
-            <div className="hazard h-full rounded-full shadow-[0_0_24px_rgba(248,190,25,0.5)]" />
-          </div>
-        </div>
-        {marks.map((m) => (
-          <div key={m} className="absolute top-0 h-full" style={{ left: `${m * 100}%` }}>
-            <div className="h-full w-px bg-zinc-950/60" />
-            <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 text-[11px] tabular-nums text-zinc-500">
-              {fmt(Math.round(goal * m))}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-400 sm:text-base">
-        {!columns.cofEnviada ? (
-          <span className="text-amber-400">
-            <TriangleAlert size={14} className="mr-1 inline" />
-            crie a coluna &quot;COF Enviada&quot; (Sim/Não) na planilha
-          </span>
-        ) : stats.cof >= goal ? (
-          <span className="font-display text-2xl text-bf">META BATIDA! 🎉</span>
-        ) : (
-          <span>
-            faltam <b className="font-display text-2xl text-bf">{fmt(left)}</b> COFs
-          </span>
-        )}
-        <span>
-          <Flame size={14} className="mr-1 inline text-orange-400" />
-          hoje <b className="text-white">{fmt(stats.today)}</b> {stats.today === 1 ? "lead" : "leads"}
-        </span>
-        <span>
-          <Zap size={14} className="mr-1 inline text-bf" />
-          <b className="text-white">{fmt(stats.total)}</b> leads na planilha
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ---------------- Funil ----------------
+// ---------------- Funil do CRM ----------------
 export function Funnel({ funnel, total, qualification }: { funnel: Stats["funnel"]; total: number; qualification: Stats["qualification"] }) {
   const max = Math.max(1, ...funnel.map((f) => f.count));
   return (
@@ -383,18 +493,8 @@ export function Funnel({ funnel, total, qualification }: { funnel: Stats["funnel
   );
 }
 
-// ---------------- Feed ----------------
-export function Feed({
-  leads,
-  now,
-  className = "flex-1",
-  cofOnly = false,
-}: {
-  leads: Lead[];
-  now: number;
-  className?: string;
-  cofOnly?: boolean; // tela da campanha: mostra "COF enviada" em vez de "qualificado"
-}) {
+// ---------------- Feed (visão completa) ----------------
+export function Feed({ leads, now, className = "flex-1" }: { leads: Lead[]; now: number; className?: string }) {
   return (
     <div className={`panel p-4 sm:p-5 ${className}`}>
       <h2 className="mb-3 flex items-center gap-2 font-display text-2xl tracking-wide">
@@ -409,10 +509,7 @@ export function Feed({
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">
                   {l.nome}
-                  <span className="font-normal text-zinc-500">
-                    {" "}
-                    · {[l.cidade, l.uf].filter(Boolean).join("/") || "—"}
-                  </span>
+                  <span className="font-normal text-zinc-500"> · {[l.cidade, l.uf].filter(Boolean).join("/") || "—"}</span>
                 </p>
                 <p className="truncate text-xs text-zinc-400">
                   {l.vendedor ? (
@@ -422,31 +519,24 @@ export function Feed({
                   ) : (
                     <span className="text-amber-400">Sem Responsável</span>
                   )}
-                  {cofOnly
-                    ? (l.presenca && (
-                        <span className="ml-1.5 font-semibold text-emerald-400">
-                          <UserCheck size={11} className="mr-0.5 inline" />
-                          presença confirmada
-                        </span>
-                      )) ||
-                      (l.convite && (
-                        <span className="ml-1.5 font-semibold text-sky-300">
-                          <Send size={11} className="mr-0.5 inline" />
-                          convite enviado
-                        </span>
-                      )) ||
-                      (l.cof && (
-                        <span className="ml-1.5 font-semibold text-bf">
-                          <BadgeCheck size={11} className="mr-0.5 inline" />
-                          COF enviada
-                        </span>
-                      ))
-                    : isQualified(l) && (
-                        <span className="ml-1.5 text-emerald-400">
-                          <BadgeCheck size={11} className="mr-0.5 inline" />
-                          qualificado
-                        </span>
-                      )}
+                  {(l.presenca && (
+                    <span className="ml-1.5 font-semibold text-bf">
+                      <UserCheck size={11} className="mr-0.5 inline" />
+                      presença confirmada
+                    </span>
+                  )) ||
+                    (l.convite && (
+                      <span className="ml-1.5 font-semibold text-sky-300">
+                        <Send size={11} className="mr-0.5 inline" />
+                        convite enviado
+                      </span>
+                    )) ||
+                    (isQualified(l) && (
+                      <span className="ml-1.5 text-emerald-400">
+                        <BadgeCheck size={11} className="mr-0.5 inline" />
+                        qualificado
+                      </span>
+                    ))}
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -459,60 +549,6 @@ export function Feed({
           ))}
         </ul>
       )}
-    </div>
-  );
-}
-
-// ---------------- COFs por dia ----------------
-const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-
-export function CofHistory({ daily, now, className = "" }: { daily: Stats["cofDaily"]; now: number; className?: string }) {
-  const today = now ? dayKey(now) : "";
-  const max = Math.max(1, ...daily.map((d) => d.count));
-  const total = daily.reduce((s, d) => s + d.count, 0);
-  return (
-    <div className={`panel flex flex-col p-4 sm:p-5 ${className}`}>
-      <h2 className="mb-3 flex items-center justify-between gap-2 font-display text-2xl tracking-wide">
-        <span className="flex items-center gap-2">
-          <BadgeCheck size={20} className="text-bf" /> COFS POR DIA
-        </span>
-        <span className="font-sans text-xs font-semibold normal-case tracking-normal text-zinc-400">
-          <b className="text-bf">{fmt(total)}</b> em {daily.length} dias
-        </span>
-      </h2>
-      <div className="flex min-h-32 flex-1 items-end gap-1.5 sm:gap-2">
-        {daily.map((d) => {
-          const isToday = d.day === today;
-          // meio-dia evita que o fuso puxe a data para o dia anterior
-          const weekday = DIAS[new Date(`${d.day}T12:00:00`).getDay()];
-          const label = isToday ? "hoje" : weekday;
-          return (
-            <div
-              key={d.day}
-              title={`${d.day.slice(8)}/${d.day.slice(5, 7)}: ${d.count} COFs`}
-              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
-            >
-              <span className={`mb-0.5 text-xs tabular-nums ${isToday ? "font-bold text-bf" : d.count ? "text-zinc-300" : "text-zinc-600"}`}>
-                {d.count}
-              </span>
-              {d.count === 0 ? (
-                <div className={`w-full rounded-full ${isToday ? "h-[3px] bg-bf/70" : "h-px bg-zinc-700"}`} />
-              ) : (
-                <div
-                  className={`animate-rise w-full rounded-t ${
-                    isToday ? "bg-bf shadow-[0_0_16px_rgba(248,190,25,0.6)]" : "bg-bf/40"
-                  }`}
-                  style={{ height: `${Math.max(4, (d.count / max) * 78)}%` }}
-                />
-              )}
-              <span className={`mt-1 text-[10px] uppercase ${isToday ? "font-bold text-bf" : "text-zinc-500"}`}>{label}</span>
-              <span className="text-[9px] tabular-nums text-zinc-600">
-                {d.day.slice(8)}/{d.day.slice(5, 7)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -606,33 +642,50 @@ export function States({ states }: { states: Stats["states"] }) {
   );
 }
 
-// ---------------- Toast de novo lead ----------------
-export function NewLeadToast({ lead, kind, onDone }: { lead: Lead; kind: "lead" | "cof"; onDone: () => void }) {
+// ---------------- Toast: presença / convite / novo lead ----------------
+export type ToastKind = "lead" | "convite" | "presenca";
+
+export function NewLeadToast({ lead, kind, left, onDone }: { lead: Lead; kind: ToastKind; left?: number; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 6500);
     return () => clearTimeout(t);
   }, [onDone]);
 
-  const cof = kind === "cof";
+  const presenca = kind === "presenca";
+  const title = presenca ? "PRESENÇA CONFIRMADA! +1 NA META" : kind === "convite" ? "CONVITE ENVIADO!" : "NOVO LEAD NA COF!";
+  const action = presenca ? "confirmou" : kind === "convite" ? "convidou" : "colocou";
   return (
-    <div className="animate-toast fixed left-1/2 top-4 z-50 w-[min(92vw,640px)]">
-      <div className="hazard rounded-2xl p-1 shadow-[0_0_60px_rgba(248,190,25,0.5)]">
-        <div className={`flex items-center gap-4 rounded-xl px-5 py-4 ${cof ? "bg-bf text-ink" : "bg-ink"}`}>
-          {cof ? <Target className="shrink-0" size={40} /> : <Flame className="shrink-0 text-bf" size={40} />}
+    <div className="animate-toast fixed left-1/2 top-4 z-50 w-[min(92vw,720px)]">
+      <div className="hazard rounded-2xl p-1 shadow-[0_0_70px_rgba(248,190,25,0.6)]">
+        <div className={`flex items-center gap-4 rounded-xl px-5 py-4 ${presenca ? "bg-bf text-ink" : "bg-ink"}`}>
+          {presenca ? (
+            <UserCheck className="shrink-0" size={48} />
+          ) : kind === "convite" ? (
+            <Send className="shrink-0 text-sky-300" size={40} />
+          ) : (
+            <Flame className="shrink-0 text-bf" size={40} />
+          )}
           <div className="min-w-0">
-            <p className={`font-display text-2xl leading-tight tracking-wide sm:text-3xl ${cof ? "" : "text-bf"}`}>
-              {cof ? "+1 NA META! COF ENVIADA" : "NOVO LEAD NA COF!"}
+            <p
+              className={`font-display leading-tight tracking-wide ${presenca ? "text-4xl" : "text-3xl"} ${
+                presenca ? "" : kind === "convite" ? "text-sky-300" : "text-bf"
+              }`}
+            >
+              {title}
             </p>
-            <p className="truncate text-sm sm:text-base">
-              <b>{lead.vendedor || "Alguém"}</b> {cof ? "enviou a COF para" : "colocou"} <b>{lead.nome}</b>
+            <p className="truncate text-base">
+              <b>{lead.vendedor || "Alguém"}</b> {action} <b>{lead.nome}</b>
               {lead.cidade && (
-                <span className={cof ? "text-ink/70" : "text-zinc-400"}>
+                <span className={presenca ? "text-ink/70" : "text-zinc-400"}>
                   {" "}
                   · {lead.cidade}
                   {lead.uf && `/${lead.uf}`}
                 </span>
               )}
             </p>
+            {presenca && left != null && left > 0 && (
+              <p className="text-sm font-black uppercase tracking-widest">faltam {fmt(left)} para a meta</p>
+            )}
           </div>
         </div>
       </div>
@@ -640,21 +693,24 @@ export function NewLeadToast({ lead, kind, onDone }: { lead: Lead; kind: "lead" 
   );
 }
 
-// ---------------- Meta do dia batida ----------------
-export function DailyGoalToast({ cofToday, dailyGoal, onDone }: { cofToday: number; dailyGoal: number; onDone: () => void }) {
+// ---------------- Marco da meta (25%, 50%, 75%) ----------------
+export function MilestoneToast({ value, goal, onDone }: { value: number; goal: number; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 8000);
     return () => clearTimeout(t);
   }, [onDone]);
+  const half = value * 2 === goal;
   return (
-    <div className="animate-toast fixed left-1/2 top-4 z-50 w-[min(92vw,760px)]" style={{ animationDuration: "8s" }}>
-      <div className="hazard rounded-2xl p-1.5 shadow-[0_0_90px_rgba(52,211,153,0.6)]">
-        <div className="flex items-center gap-5 rounded-xl bg-emerald-500 px-6 py-5 text-ink">
-          <Megaphone className="shrink-0" size={52} />
+    <div className="animate-toast fixed left-1/2 top-4 z-50 w-[min(92vw,820px)]" style={{ animationDuration: "8s" }}>
+      <div className="hazard rounded-2xl p-1.5 shadow-[0_0_90px_rgba(248,190,25,0.7)]">
+        <div className="flex items-center gap-5 rounded-xl bg-bf px-6 py-5 text-ink">
+          <Megaphone className="shrink-0" size={56} />
           <div className="min-w-0">
-            <p className="font-display text-4xl leading-tight tracking-wide">META DO DIA BATIDA!</p>
-            <p className="text-base font-semibold">
-              {fmt(cofToday)} de {fmt(dailyGoal)} COFs enviadas hoje — bora passar!
+            <p className="font-display text-5xl leading-tight tracking-wide">
+              {fmt(value)} PRESENÇAS! {half && "METADE DO CAMINHO!"}
+            </p>
+            <p className="text-lg font-bold">
+              Faltam {fmt(goal - value)} para as {fmt(goal)} — liga pra fila que o evento tá chegando!
             </p>
           </div>
         </div>
