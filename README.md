@@ -1,6 +1,6 @@
 # Black Friday Expansão — Painel ao vivo de presenças confirmadas
 
-Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba *Qualificação COF 2026*) direto do Google Sheets — sem banco de dados — e mostra em tempo real, até o **evento (27/11)**:
+Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba *Qualificação COF 2026*) direto do Google Sheets — sem banco de dados — e mostra em tempo real, até o **evento (25/11, 19h)**:
 
 - 🎯 **Meta de 100 presenças confirmadas** (coluna *Presença Confirmada* = Sim) em destaque, com quanto falta
 - ☎️ **Na mesa:** convidados que ainda não responderam (convite = Sim e presença vazia) e quantos deles precisam virar para bater a meta
@@ -94,7 +94,7 @@ Funciona porque a planilha está compartilhada como *Qualquer pessoa com o link*
 GOOGLE_SHEET_ID=<trecho da URL entre /d/ e /edit>
 GOOGLE_SHEET_GID=0
 META_PRESENCA=100
-NEXT_PUBLIC_EVENT_AT=2026-11-27T19:00:00-03:00
+NEXT_PUBLIC_EVENT_AT=2026-11-25T19:00:00-03:00
 ```
 
 ⚠️ Não coloque esse ID em lugar público (repositório aberto, print, mensagem em grupo grande). Hoje a planilha está como **"Qualquer pessoa com o link: Editor"**: quem tiver o ID pode ver e alterar nome, e-mail e WhatsApp de todos os candidatos.

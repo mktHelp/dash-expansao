@@ -9,7 +9,7 @@ export const CAMPAIGN_START = new Date(
 
 // EVENT_AT = data e hora do evento: usada pela contagem regressiva.
 export const EVENT_AT = new Date(
-  process.env.NEXT_PUBLIC_EVENT_AT ?? "2026-11-27T19:00:00-03:00",
+  process.env.NEXT_PUBLIC_EVENT_AT ?? "2026-11-25T19:00:00-03:00",
 ).getTime();
 
 // Dia da Black Friday (destacado no gráfico diário) — formato AAAA-MM-DD.
