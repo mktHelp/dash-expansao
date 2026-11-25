@@ -21,11 +21,18 @@ Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o c
 Abra `/?simular=presenca` (ou `convite`, `lead`, `marco`, `meta`). O alerta dispara em 3 s; depois use as teclas **P** (presença), **C** (convite), **L** (lead), **M** (marco), **G** (meta batida), **I** (+5 min sem presença) e **R** (resetar). Para ver o alarme direto: `/?simular=inatividade&minutos=20`.
 
 ### Alarme de inatividade: como funciona a trava
-- Cada TV guarda o **recorde** de presenças e de convites. **Só um total maior que o recorde zera o relógio.** Desmarcar e marcar a mesma linha volta ao mesmo número, e trocar uma linha por outra também não muda o total — nenhum dos dois zera o relógio nem repete alerta, marco ou grande final.
+- O **recorde** de presenças e de convites fica **no servidor** (Upstash Redis), junto com a hora em que foi batido. Toda tela recebe o mesmo valor pela API, então o relógio é **igual em todos os PCs** e não depende de cookie, cache ou aba anônima.
+- **Só um total maior que o recorde zera o relógio.** A troca é atômica no Redis. Desmarcar e marcar a mesma linha volta ao mesmo número, e trocar uma linha por outra também não muda o total — nenhum dos dois zera o relógio nem repete alerta, marco ou grande final.
 - O relógio só corre no **expediente** (padrão seg–sex, 08:00–18:00, Brasília). Fora dele o alarme some e a contagem pausa: se a última presença foi às 17:50, às 08:05 do dia seguinte o relógio marca 15 min.
-- O recorde fica no navegador da TV e sobrevive a recarregar a página. Ao abrir o painel pela primeira vez numa TV, o relógio começa a contar dali.
-- Se for preciso corrigir a planilha para baixo (ex.: marcaram presença errada), o recorde continua alto até ser superado. Para zerar numa TV, abra `/?zerar-recorde` uma vez.
+- O servidor só atualiza o recorde quando alguma tela está aberta (a cada leitura, ~15 s). Uma presença marcada com todas as telas fechadas conta a partir da próxima abertura.
+- Se for preciso corrigir a planilha para baixo (ex.: marcaram presença errada), o recorde continua alto até ser superado. Para zerar, apague a chave `dash-expansao:recordes` no console do Upstash (Data Browser).
+- **Sem Redis** (variáveis não configuradas ou Redis fora do ar) o painel continua funcionando, mas cada tela conta o próprio relógio no navegador, e o Relógio da Pressão mostra um aviso amarelo. Nesse modo, `/?zerar-recorde` zera o recorde daquela tela.
 - Se a planilha parar de responder, o alarme some (o painel mostra "reconectando…").
+
+#### Ligar o Redis na Vercel (uma vez)
+1. No projeto da Vercel, abra **Storage** e crie um banco **Upstash Redis** (plano gratuito), conectado a este projeto.
+2. A integração cria `KV_REST_API_URL` e `KV_REST_API_TOKEN` nas variáveis de ambiente.
+3. Faça um **Redeploy**. No Relógio da Pressão deve aparecer "igual em todas as telas".
 
 ---
 
@@ -107,5 +114,6 @@ Na TV: abra o link e clique no botão de tela cheia (canto superior direito). O 
 | `src/lib/config.ts` | data do evento, tempos do alarme, expediente, dia da Black Friday, ordem das etapas do CRM, intervalo de atualização |
 | `src/lib/sheets.ts` | leitura da planilha e nomes de colunas aceitos |
 | `src/lib/stats.ts` | cálculo de ranking, etapas e métricas |
-| `src/lib/watch.ts` | recorde e relógio de inatividade (expediente, trava contra desmarcar/marcar) |
+| `src/lib/watch.ts` | relógio de inatividade (minutos de expediente) e recorde local de reserva |
+| `src/lib/record.ts` | recorde compartilhado no Redis (atualização atômica) |
 | `src/components/` | interface |

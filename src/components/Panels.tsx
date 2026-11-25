@@ -330,6 +330,8 @@ export type Idle = {
   presenca: { minutes: number; max: number; at: number };
   convite: { minutes: number; max: number; at: number };
   working: boolean; // dentro do expediente? (fora dele o relógio pausa)
+  shared: boolean; // recorde no servidor (igual em todas as telas) ou só nesta tela
+  error?: boolean; // Redis configurado mas fora do ar
 };
 
 const clock = (ts: number) =>
@@ -421,10 +423,17 @@ export function PressureClock({
             record={idle.convite.max}
             at={idle.convite.at}
           />
-          <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-            <ShieldCheck size={13} className="shrink-0 text-zinc-400" />
-            só zera acima do recorde · desmarcar e marcar não conta
-          </p>
+          {idle.shared ? (
+            <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+              <ShieldCheck size={13} className="shrink-0 text-emerald-400" />
+              igual em todas as telas · só zera acima do recorde
+            </p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-400">
+              <TriangleAlert size={13} className="shrink-0" />
+              {idle.error ? "servidor do relógio fora do ar · contando só nesta tela" : "relógio só desta tela · configure o Redis"}
+            </p>
+          )}
         </div>
       )}
     </div>

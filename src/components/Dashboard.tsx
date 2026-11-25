@@ -153,9 +153,11 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
   const known = useRef<{ leads: Set<string>; convite: Set<string>; presenca: Set<string> } | null>(null);
   // versão do deploy vista na 1ª leitura; se mudar, recarrega a página sozinho
   const build = useRef<string | null>(null);
-  // recordes de presenças e convites (relógio de inatividade, marcos e grande final)
+  // recordes de presenças e convites (relógio de inatividade, marcos e grande final).
+  // Com Redis configurado o recorde vem do servidor e é o mesmo em todas as telas;
+  // sem ele, cada tela guarda o seu no navegador (reserva).
   const watchRef = useRef<Watch | null | undefined>(undefined);
-  const [watch, setWatch] = useState<Watch | null>(null);
+  const [watch, setWatch] = useState<(Watch & { shared: boolean; error?: boolean }) | null>(null);
   const onAlertsRef = useRef(onAlerts);
   useEffect(() => {
     onAlertsRef.current = onAlerts;
@@ -187,15 +189,24 @@ function useLeads(onAlerts: (alerts: Alert[]) => void) {
         // recorde: só um total MAIOR que o maior já visto conta como novo.
         // Desmarcar e marcar de novo volta ao mesmo número — não zera o relógio
         // nem repete marco ou grande final.
-        if (watchRef.current === undefined) watchRef.current = loadWatch();
-        const old = watchRef.current;
-        const next: Watch = {
-          presenca: bump(old?.presenca, st.presenca, now),
-          convite: bump(old?.convite, st.convite, now),
-        };
+        const shared = payload.clock?.mode === "shared";
+        let old: Watch | null;
+        let next: Watch;
+        if (payload.clock?.mode === "shared") {
+          // recorde do servidor; "old" = o que esta tela viu na leitura anterior
+          old = watchRef.current ?? null;
+          next = payload.clock.watch;
+        } else {
+          if (watchRef.current === undefined) watchRef.current = loadWatch();
+          old = watchRef.current;
+          next = {
+            presenca: bump(old?.presenca, st.presenca, now),
+            convite: bump(old?.convite, st.convite, now),
+          };
+          saveWatch(next);
+        }
         watchRef.current = next;
-        saveWatch(next);
-        setWatch(next);
+        setWatch({ ...next, shared, error: payload.clock?.mode === "local" && payload.clock.error });
 
         // meta batida (grande final) ou marco cruzado — só quando passa do recorde anterior
         const prev = old?.presenca.max;
@@ -385,6 +396,8 @@ export default function Dashboard({ variant = "simple" }: { variant?: "simple" |
       presenca: { ...watch.presenca, minutes: minutes(watch.presenca.at) },
       convite: { ...watch.convite, minutes: minutes(watch.convite.at) },
       working: simIdle > 0 || isWorkTime(now),
+      shared: watch.shared,
+      error: watch.error,
     };
   }, [watch, now, simIdle]);
   // alarmes só na tela da TV, no expediente e com a planilha respondendo

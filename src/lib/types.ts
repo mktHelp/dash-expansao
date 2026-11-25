@@ -1,3 +1,5 @@
+import type { Watch } from "./watch";
+
 // Lead já "higienizado": e-mail, WhatsApp e capital NUNCA saem do servidor.
 export type Lead = {
   id: string;
@@ -25,4 +27,7 @@ export type LeadsPayload = {
   source: "sheets" | "csv" | "demo";
   fetchedAt: number;
   build?: string; // id do deploy; quando muda, as telas abertas recarregam
+  // relógio de inatividade: "shared" = recorde no servidor (igual em todas as
+  // telas); "local" = sem Redis configurado (ou fora do ar), cada tela conta o seu
+  clock?: { mode: "shared"; watch: Watch } | { mode: "local"; error?: boolean };
 };
