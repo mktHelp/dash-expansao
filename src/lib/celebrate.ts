@@ -92,9 +92,9 @@ export function flushPendingVictory(ctx: AudioContext | null) {
 }
 
 /** Explosões de confete pela tela durante `ms` milissegundos (meta diária). */
-export function confettiBurst(ms = 5000) {
+export function confettiBurst(ms = 5000, colors: string[] = COLORS) {
   const end = Date.now() + ms;
-  const base = { colors: COLORS, disableForReducedMotion: true, zIndex: 100 };
+  const base = { colors, disableForReducedMotion: true, zIndex: 100 };
 
   // estouro grande no centro logo de cara
   void confetti({ ...base, particleCount: 160, spread: 100, startVelocity: 55, origin: { x: 0.5, y: 0.45 } });

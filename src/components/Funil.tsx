@@ -1,32 +1,35 @@
 "use client";
 
-// Funil ao vivo (/funil): aba "Ao Vivo" da planilha, como um show.
-// Holofotes sobre o placar; a meta é um conjunto de fichas douradas — cada
-// venda cunha uma ficha com as iniciais de quem fechou (e ela gira ao entrar).
-// Embaixo, todos os leads rolando com a jornada lead → reserva → franquia
-// acesa, e os closers acumulando fichas.
+// Funil ao vivo (/funil) — "a grande noite".
+// Um letreiro de teatro: no centro do palco, um arco de lâmpadas em volta do
+// número de vendas (prata = reserva, ouro = franquia). Nas coxias, reservas e
+// franquias. Embaixo, os leads passam como créditos de cinema e os closers
+// acumulam lâmpadas. Cada venda é anunciada como numa premiação.
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Crown, FileSignature, Maximize, PartyPopper, Trophy, UserPlus, Volume2, VolumeX } from "lucide-react";
-import { POLL_MS } from "@/lib/config";
-import {
-  confettiBurst,
-  fireworksShow,
-  flushPendingVictory,
-  playCelebration,
-  playVictory,
-  preloadVictory,
-} from "@/lib/celebrate";
+import { Crown, Maximize, Volume2, VolumeX } from "lucide-react";
+import { EVENT_AT, POLL_MS } from "@/lib/config";
+import { confettiBurst, fireworksShow, flushPendingVictory, playCelebration, playVictory, preloadVictory } from "@/lib/celebrate";
 import { getAudio, playChaChing, readAudioState, reloadedRecently, serverAudioState, subscribeAudio, useClock } from "@/lib/live";
 import type { FunilLead, FunilPayload } from "@/lib/types";
 import FitStage, { useStaged } from "./FitStage";
-import { Countdown, LiveBadge } from "./Panels";
 import { TelaoCard } from "./Telao";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
 const pctOf = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 const isSale = (l: FunilLead) => l.reserva || l.franquia;
 const first = (name: string) => name.split(" ")[0] ?? name;
+const place = (l: FunilLead) => [l.cidade, l.uf].filter(Boolean).join(", ");
+
+// "venda" é feminino: uma, duas…
+const EXTENSO = [
+  "zero", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez",
+  "onze", "doze", "treze", "catorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove", "vinte",
+];
+const extenso = (n: number) => EXTENSO[n] ?? fmt(n);
+const vendas = (n: number) => `${extenso(n)} ${n === 1 ? "venda" : "vendas"}`;
+
+const GALA_CONFETTI = ["#f8be19", "#ffe6a0", "#ffd700", "#d5dbe2", "#ffffff"];
 
 // ---------------- dados ----------------
 
@@ -37,7 +40,7 @@ const useParams = () => useSyncExternalStore(noopSubscribe, readParams, () => ""
 type Person = { name: string; leads: number; vendas: number; reservas: number; franquias: number };
 
 export function computeFunil(leads: FunilLead[]) {
-  const sales = leads.filter(isSale).sort((a, b) => a.row - b.row); // ordem da planilha = ordem das fichas
+  const sales = leads.filter(isSale).sort((a, b) => a.row - b.row); // ordem da planilha = ordem das lâmpadas
   const reservas = leads.filter((l) => l.reserva).length;
   const franquias = leads.filter((l) => l.franquia).length;
 
@@ -100,8 +103,8 @@ function useFunil(onAlerts: (a: FunilAlert[]) => void, demo: boolean) {
           }
           build.current = payload.build;
         }
-        const vendas = payload.leads.filter(isSale).length;
-        const left = Math.max(0, payload.goal - vendas);
+        const total = payload.leads.filter(isSale).length;
+        const left = Math.max(0, payload.goal - total);
 
         if (!known.current) {
           // primeira leitura: tudo que já existe conta como visto
@@ -126,11 +129,11 @@ function useFunil(onAlerts: (a: FunilAlert[]) => void, demo: boolean) {
             else if (isNew) alerts.push({ kind: "lead", lead: l, left });
           }
           if (alerts.length > 10) alerts.length = 0; // colagem em massa: sem spam
-          const prev = lastVendas.current ?? vendas;
-          if (prev < payload.goal && vendas >= payload.goal) alerts.unshift({ kind: "meta", vendas, goal: payload.goal });
+          const prev = lastVendas.current ?? total;
+          if (prev < payload.goal && total >= payload.goal) alerts.unshift({ kind: "meta", vendas: total, goal: payload.goal });
           if (alerts.length) onAlertsRef.current(alerts);
         }
-        lastVendas.current = vendas;
+        lastVendas.current = total;
         setData(payload);
         setError(null);
       } catch (e) {
@@ -149,191 +152,211 @@ function useFunil(onAlerts: (a: FunilAlert[]) => void, demo: boolean) {
   return { data, error };
 }
 
-// ---------------- o palco: placar + fichas ----------------
+// ---------------- topo ----------------
 
-/** Ficha da meta. Cunhada (dourada) quando há venda: iniciais de quem fechou + o lead. */
-function Coin({ n, sale, flip, size }: { n: number; sale: FunilLead | undefined; flip: boolean; size: "lg" | "sm" }) {
-  const big = size === "lg";
-  const who = sale ? first(sale.closer || sale.sdr) : "";
+function NightClock({ now }: { now: number }) {
+  if (!now) return <p className="text-zinc-500">&nbsp;</p>;
+  const left = EVENT_AT - now;
+  if (left <= 0) return <p className="font-gala text-2xl italic text-bf">A grande noite começou</p>;
+  const d = Math.floor(left / 86_400_000);
+  const h = Math.floor(left / 3_600_000) % 24;
+  const m = Math.floor(left / 60_000) % 60;
+  const s = Math.floor(left / 1000) % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
   return (
-    <div className="flex min-w-0 flex-col items-center gap-2 [perspective:800px]">
-      <div
-        className={`grid place-items-center rounded-full ${big ? "size-[7.25rem]" : "size-14"} ${
-          sale ? (sale.franquia ? "coin coin-franquia" : "coin") : "coin-empty"
-        } ${flip ? "animate-coin-flip" : ""}`}
-      >
-        {sale ? (
-          <span className="flex flex-col items-center leading-none text-[#3a2800]">
-            {sale.franquia && <Crown className={big ? "-mb-0.5 size-5" : "size-3"} strokeWidth={2.5} />}
-            <span className={`font-display ${big ? "text-5xl" : "text-2xl"}`}>{n}</span>
-          </span>
-        ) : (
-          <span className={`font-display leading-none text-zinc-600 ${big ? "text-4xl" : "text-xl"}`}>{n}</span>
+    <p className="flex flex-wrap items-baseline justify-center gap-x-3 text-[#8b857a]">
+      <span className="font-gala text-lg italic">a grande noite começa em</span>
+      <span className="whitespace-nowrap font-gala text-[2.1rem] leading-none tabular-nums text-[#f4efe6]">
+        {d > 0 && (
+          <>
+            {d}
+            <span className="text-xl text-[#8b857a]">d </span>
+          </>
         )}
-      </div>
-      <div className={`max-w-full text-center leading-tight ${big ? "text-sm" : "hidden"}`}>
-        <p className={`truncate ${sale ? "font-semibold text-bf-soft" : "text-zinc-600"}`}>{sale ? sale.nome : "em aberto"}</p>
-        {sale && who && <p className="truncate text-zinc-400">por {who}</p>}
-      </div>
-    </div>
+        {pad(h)}
+        <span className="text-xl text-[#8b857a]">h </span>
+        {pad(m)}
+        <span className="text-xl text-[#8b857a]">m </span>
+        {pad(s)}
+        <span className="text-xl text-[#8b857a]">s</span>
+      </span>
+    </p>
   );
 }
 
-function Stage({
+function LiveNote({ now, fetchedAt, error, demo }: { now: number; fetchedAt: number | null; error: string | null; demo: boolean }) {
+  const secs = now && fetchedAt ? Math.max(0, Math.round((now - fetchedAt) / 1000)) : null;
+  return (
+    <p className="flex items-center gap-2 text-sm text-[#8b857a]">
+      {demo && <span className="rounded-full border border-[#d5dbe2]/40 px-2 py-px text-xs text-[#d5dbe2]">dados de exemplo</span>}
+      {error ? (
+        <span className="flex items-center gap-1.5 text-red-400" title={error}>
+          <span className="size-1.5 rounded-full bg-red-500" /> Reconectando à planilha
+        </span>
+      ) : (
+        <span className="flex items-center gap-1.5">
+          <span className="relative flex size-1.5">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex size-1.5 rounded-full bg-red-500" />
+          </span>
+          Ao vivo{secs != null && `, atualizado há ${secs} s`}
+        </span>
+      )}
+    </p>
+  );
+}
+
+// ---------------- o palco ----------------
+
+/** Arco de lâmpadas (proscênio) em volta do número. Prata = reserva, ouro = franquia. */
+function Marquee({
   sales,
   goal,
-  reservas,
-  franquias,
-  total,
-  flipId,
-  compact,
+  igniteId,
+  staged,
 }: {
   sales: FunilLead[];
   goal: number;
-  reservas: number;
-  franquias: number;
-  total: number;
-  flipId: string | null;
-  compact: boolean;
+  igniteId: string | null;
+  staged: boolean;
 }) {
-  const vendas = sales.length;
-  const left = Math.max(0, goal - vendas);
-  const done = vendas >= goal;
-  const perRow = compact ? 5 : goal <= 10 ? 5 : 10;
-  const coins = Array.from({ length: Math.max(goal, vendas) }, (_, i) => i);
+  const n = Math.max(1, goal);
+  const total = sales.length;
+  const bulbs = Array.from({ length: n }, (_, i) => {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const ang = Math.PI * (1 - t); // da esquerda para a direita, passando pelo topo
+    return { i, x: 50 + 46 * Math.cos(ang), y: 100 - 92 * Math.sin(ang) };
+  });
+  const size = staged ? "size-[40px]" : "size-[clamp(14px,5vw,30px)]";
 
   return (
-    <section className="stage-lights relative isolate overflow-hidden rounded-[2rem] border border-bf/30 bg-[radial-gradient(120%_90%_at_50%_0%,#1c1606,#0a0a0a_60%)] px-6 pb-6 pt-5 sm:px-10">
-      {/* chão do palco: reflexo dourado embaixo das fichas */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-1/3 bg-[radial-gradient(60%_100%_at_50%_100%,rgba(248,190,25,0.16),transparent)]" />
-
-      <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)_minmax(0,0.6fr)]">
-        {/* placar */}
-        <div className="min-w-0">
-          <p className="text-lg font-semibold text-zinc-300">Vendas da Black</p>
-          <p className="mt-1 flex items-baseline gap-3 font-display leading-[0.78]">
-            <span className="gold-text text-[8rem] tabular-nums sm:text-[13rem]">{fmt(vendas)}</span>
-            <span className="text-5xl text-zinc-500 sm:text-8xl">/{fmt(goal)}</span>
-          </p>
-          <p className="mt-4 text-lg text-zinc-300 sm:text-xl">
-            {done ? (
-              <b className="font-display text-4xl tracking-wide text-[#ffd700]">Meta batida. Casa em festa!</b>
-            ) : (
-              <>
-                Faltam <b className="font-display text-4xl tracking-wide text-white">{fmt(left)}</b>{" "}
-                {left === 1 ? "venda" : "vendas"} para fechar a noite
-              </>
-            )}
-          </p>
-          <p className="mt-1 text-sm text-zinc-500">Conta como venda: termo de reserva ou taxa de franquia.</p>
-        </div>
-
-        {/* fichas da meta */}
-        <div
-          className="grid gap-x-4 gap-y-3"
-          style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
-          aria-label={`${vendas} de ${goal} fichas da meta`}
+    <div className="relative mx-auto aspect-[2/1] w-full">
+      {/* o arco: dois fios finos dourados */}
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible" aria-hidden>
+        <path d="M 4 100 A 46 92 0 0 1 96 100" fill="none" stroke="rgb(248 190 25 / 0.28)" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
+        <path d="M 10 100 A 40 80 0 0 1 90 100" fill="none" stroke="rgb(248 190 25 / 0.12)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      </svg>
+      {bulbs.map(({ i, x, y }) => {
+        const sale = sales[i];
+        const tone = sale ? (sale.franquia ? "bulb-gold" : "bulb-silver") : "bulb-off";
+        return (
+          <span
+            key={i}
+            title={sale ? `${sale.nome}${sale.closer ? `, com ${sale.closer}` : ""}` : `venda ${i + 1}`}
+            className={`bulb ${size} ${tone} ${sale && sale.id === igniteId ? "bulb-ignite" : ""}`}
+            style={{ left: `${x}%`, top: `${y}%`, animationDelay: sale && sale.id !== igniteId ? `${(i * 0.37) % 3.4}s` : undefined }}
+          />
+        );
+      })}
+      {/* o número, no centro do palco */}
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-center gap-3">
+        <span
+          key={total}
+          className={`numeral-in font-gala gala-gold leading-[0.74] tabular-nums ${staged ? "text-[290px]" : "text-[clamp(7rem,38vw,16rem)]"}`}
         >
-          {coins.map((i) => (
-            <Coin
-              key={i}
-              n={i + 1}
-              sale={sales[i]}
-              flip={!!sales[i] && sales[i].id === flipId}
-              size={compact || coins.length > 10 ? "sm" : "lg"}
-            />
-          ))}
-        </div>
-
-        {/* bastidores: reservas, franquias, leads */}
-        <dl className="grid grid-cols-3 gap-3 border-t border-white/10 pt-4 lg:grid-cols-1 lg:gap-0 lg:divide-y lg:divide-white/10 lg:border-0 lg:pt-0">
-          {[
-            { label: "Reservas", value: reservas, hint: "termos assinados", cls: "text-sky-300" },
-            { label: "Franquias", value: franquias, hint: "taxas pagas", cls: "text-bf" },
-            { label: "Leads", value: total, hint: `${pctOf(vendas, total)}% viraram venda`, cls: "text-white" },
-          ].map((s) => (
-            <div key={s.label} className="flex flex-col-reverse justify-end lg:flex-row lg:items-baseline lg:justify-between lg:gap-3 lg:py-3">
-              <dt className="text-sm text-zinc-400">
-                <span className="block text-base font-semibold text-zinc-200">{s.label}</span>
-                <span className="hidden lg:inline">{s.hint}</span>
-              </dt>
-              <dd className={`font-display text-5xl leading-none tabular-nums sm:text-7xl ${s.cls}`}>{fmt(s.value)}</dd>
-            </div>
-          ))}
-        </dl>
+          {fmt(total)}
+        </span>
+        <span className={`font-gala italic text-[#8b857a] ${staged ? "mb-4 text-6xl" : "mb-2 text-[clamp(1.5rem,7vw,3rem)]"}`}>
+          de {fmt(goal)}
+        </span>
       </div>
-    </section>
-  );
-}
-
-// ---------------- leads: a jornada de cada um ----------------
-
-/** Lead → Reserva → Franquia, acendendo conforme avança. */
-function Journey({ l }: { l: FunilLead }) {
-  const r = l.reserva || l.franquia;
-  const f = l.franquia;
-  const node = (on: boolean, tone: string) =>
-    `size-4 shrink-0 rounded-full ring-2 ${on ? `${tone} ring-white/20` : "bg-zinc-900 ring-zinc-700"}`;
-  return (
-    <div className="flex items-center" aria-label={f ? "Franquia paga" : r ? "Reserva assinada" : "Em negociação"}>
-      <span className={node(true, "bg-zinc-200")} />
-      <span className={`h-1 flex-1 rounded-full ${r ? (f ? "bg-bf" : "bg-sky-400") : "bg-zinc-800"}`} />
-      <span className={node(r, f ? "bg-bf shadow-[0_0_12px_rgba(248,190,25,0.8)]" : "bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]")} />
-      <span className={`h-1 flex-1 rounded-full ${f ? "bg-bf" : "bg-zinc-800"}`} />
-      <span className="grid place-items-center">
-        {f ? (
-          <Crown size={22} className="text-bf drop-shadow-[0_0_10px_rgba(248,190,25,0.9)]" />
-        ) : (
-          <span className={node(false, "")} />
-        )}
-      </span>
     </div>
   );
 }
 
-// celular: candidato + jornada; TV: + modelo e a dupla SDR → closer
+/** Figura das coxias: número em metal, nome e uma nota em itálico. */
+function Wing({
+  value,
+  label,
+  note,
+  metal,
+  staged,
+  align,
+}: {
+  value: number;
+  label: string;
+  note: string;
+  metal: "gala-gold" | "gala-silver";
+  staged: boolean;
+  align: "left" | "right";
+}) {
+  return (
+    <div className={align === "right" ? "text-right" : "text-left"}>
+      <p className={`font-gala ${metal} leading-[0.8] tabular-nums ${staged ? "text-[180px]" : "text-[clamp(4rem,18vw,7rem)]"}`}>
+        {fmt(value)}
+      </p>
+      <p className={`mt-3 font-semibold text-[#f4efe6] ${staged ? "text-2xl" : "text-lg"}`}>{label}</p>
+      <p className={`font-gala italic text-[#8b857a] ${staged ? "text-xl" : "text-base"}`}>{note}</p>
+    </div>
+  );
+}
+
+function Ornament() {
+  return (
+    <div className="flex items-center gap-3" aria-hidden>
+      <span className="h-px flex-1 bg-gradient-to-r from-transparent to-bf/45" />
+      <span className="size-1 rotate-45 bg-bf/60" />
+      <span className="size-2 rotate-45 border border-bf/70" />
+      <span className="size-1 rotate-45 bg-bf/60" />
+      <span className="h-px flex-1 bg-gradient-to-l from-transparent to-bf/45" />
+    </div>
+  );
+}
+
+// ---------------- créditos: quem está no funil ----------------
+
+/** Lead → reserva → franquia, acendendo conforme avança. */
+function Journey({ l }: { l: FunilLead }) {
+  const r = l.reserva || l.franquia;
+  const f = l.franquia;
+  return (
+    <div className="flex items-center" aria-label={f ? "Franquia paga" : r ? "Reserva assinada" : "Em negociação"}>
+      <span className="size-2.5 shrink-0 rounded-full bg-[#f4efe6]/80" />
+      <span className={`h-px flex-1 ${r ? "bg-gradient-to-r from-[#f4efe6]/70 to-[#d5dbe2]" : "bg-white/10"}`} />
+      <span className={`size-3.5 shrink-0 rounded-full ${r ? "bulb-silver !animate-none" : "border border-white/15"}`} />
+      <span className={`h-px flex-1 ${f ? "bg-gradient-to-r from-[#d5dbe2] to-bf" : "bg-white/10"}`} />
+      {f ? (
+        <Crown size={20} strokeWidth={1.75} className="shrink-0 text-bf drop-shadow-[0_0_10px_rgba(248,190,25,0.9)]" />
+      ) : (
+        <span className="size-3.5 shrink-0 rounded-full border border-white/15" />
+      )}
+    </div>
+  );
+}
+
+// celular: candidato + jornada; TV: + modelo e closer
 const ROW =
-  "grid grid-cols-[minmax(0,1fr)_8rem] items-center gap-5 sm:grid-cols-[minmax(0,1.7fr)_minmax(0,1.25fr)_minmax(0,0.8fr)_minmax(0,1.2fr)]";
+  "grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-6 sm:grid-cols-[minmax(0,1.5fr)_17rem_minmax(0,0.75fr)_minmax(0,1fr)]";
 const WIDE = "hidden sm:block";
 
 function LeadRow({ l, highlight }: { l: FunilLead; highlight: boolean }) {
-  const tone = l.franquia
-    ? "bg-[linear-gradient(90deg,rgba(248,190,25,0.18),rgba(248,190,25,0.03))] shadow-[inset_3px_0_0_#f8be19]"
-    : l.reserva
-      ? "bg-[linear-gradient(90deg,rgba(56,189,248,0.14),rgba(56,189,248,0.02))] shadow-[inset_3px_0_0_#38bdf8]"
-      : "bg-white/[0.025]";
+  const name = l.franquia ? "text-bf" : l.reserva ? "text-[#e6ebf1]" : "text-[#f4efe6]";
   return (
-    <li className={`${ROW} rounded-xl px-4 py-3 ${tone} ${highlight ? "animate-flash" : ""}`}>
+    <li className={`${ROW} border-b border-white/[0.06] px-2 py-3.5 ${highlight ? "animate-flash rounded-lg" : ""}`}>
       <div className="min-w-0">
-        <p className="truncate text-[1.35rem] font-bold leading-tight text-white">{l.nome}</p>
-        <p className="truncate text-sm text-zinc-400">{[l.cidade, l.uf].filter(Boolean).join(", ") || "Cidade a confirmar"}</p>
+        <p className={`truncate text-2xl font-semibold leading-tight ${name}`}>{l.nome}</p>
+        <p className="truncate text-sm text-[#8b857a]">{place(l) || "cidade a confirmar"}</p>
       </div>
       <Journey l={l} />
-      <p className={`${WIDE} flex items-center gap-2 truncate text-base text-zinc-300`}>
-        {l.modelo ? (
-          <>
-            <span className={`size-2.5 shrink-0 rounded-full ${l.modelo === "Loja" ? "bg-bf" : l.modelo === "Home Based" ? "bg-emerald-400" : "bg-zinc-500"}`} />
-            {l.modelo}
-          </>
-        ) : (
-          <span className="text-zinc-600">a definir</span>
-        )}
-      </p>
-      <p className={`${WIDE} truncate text-base text-zinc-400`}>
-        {l.sdr || "—"} <span className="text-zinc-600">→</span> <b className="font-semibold text-white">{l.closer || "—"}</b>
-      </p>
+      <p className={`${WIDE} truncate text-lg text-[#c9c2b4]`}>{l.modelo || <span className="text-[#5d584f]">a definir</span>}</p>
+      <div className={`${WIDE} min-w-0`}>
+        <p className="truncate text-xl font-semibold text-[#f4efe6]">{l.closer || <span className="text-[#5d584f]">sem closer</span>}</p>
+        {l.sdr && <p className="truncate text-sm text-[#8b857a]">trazido por {l.sdr}</p>}
+      </div>
     </li>
   );
 }
 
-/** Lista de todos os leads; quando não cabe, rola sozinha em loop. */
-function LeadBoard({
+/** Todos os leads; quando não cabem, sobem devagar como créditos de cinema. */
+function Credits({
   leads,
+  vendas,
   modelos,
   highlight,
   className = "",
 }: {
   leads: FunilLead[];
+  vendas: number;
   modelos: Person[];
   highlight: string | null;
   className?: string;
@@ -350,58 +373,59 @@ function LeadBoard({
     ro.observe(l);
     return () => ro.disconnect();
   }, []);
+  const known = modelos.filter((m) => m.name !== "A definir");
 
   return (
-    <section className={`flex min-h-0 flex-col rounded-[1.5rem] border border-white/10 bg-zinc-950/70 p-5 ${className}`}>
-      <div className="mb-2 flex items-baseline justify-between gap-4">
-        <h2 className="font-display text-4xl tracking-wide text-white">Quem está no funil</h2>
-        <p className="flex flex-wrap items-baseline justify-end gap-x-5 gap-y-1 text-base text-zinc-400">
-          {modelos
-            .filter((m) => m.name !== "A definir")
-            .map((m) => (
-              <span key={m.name} className="flex items-baseline gap-1.5">
-                <span className={`size-2.5 self-center rounded-full ${m.name === "Loja" ? "bg-bf" : "bg-emerald-400"}`} />
-                {m.name} <b className="font-display text-2xl leading-none text-white">{m.leads}</b>
-              </span>
-            ))}
+    <section className={`flex min-h-0 flex-col ${className}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-1 px-2">
+        <h2 className="font-gala text-[44px] italic leading-none text-[#f4efe6]">Quem está no funil</h2>
+        <p className="flex flex-wrap items-baseline gap-x-6 text-base text-[#8b857a]">
           <span>
-            <b className="font-display text-2xl leading-none text-white">{fmt(leads.length)}</b> {leads.length === 1 ? "lead" : "leads"}
+            <b className="font-gala text-3xl font-normal text-[#f4efe6]">{fmt(leads.length)}</b> {leads.length === 1 ? "lead" : "leads"},{" "}
+            {pctOf(vendas, leads.length)}% já viraram venda
           </span>
+          {known.map((m) => (
+            <span key={m.name} className="flex items-baseline gap-1.5">
+              <span className={`size-2 self-center rounded-full ${m.name === "Loja" ? "bg-bf" : "bg-[#d5dbe2]"}`} />
+              {m.name} <b className="font-gala text-2xl font-normal text-[#f4efe6]">{m.leads}</b>
+            </span>
+          ))}
         </p>
       </div>
-      <div className={`${ROW} px-4 pb-2 text-sm text-zinc-500`}>
+      <div className={`${ROW} mt-3 border-b border-bf/25 px-2 pb-2 text-sm text-[#8b857a]`}>
         <span>Candidato</span>
-        <span className="flex justify-between">
-          <span>Lead</span>
-          <span>Reserva</span>
-          <span>Franquia</span>
+        <span className="hidden justify-between font-gala italic sm:flex">
+          <span>lead</span>
+          <span>reserva</span>
+          <span>franquia</span>
         </span>
+        <span className="text-right font-gala italic sm:hidden">jornada</span>
         <span className={WIDE}>Modelo</span>
-        <span className={WIDE}>SDR → Closer</span>
+        <span className={WIDE}>Closer</span>
       </div>
       <div
         ref={viewport}
-        className="relative min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_10px,black_calc(100%-32px),transparent)]"
+        className="relative min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_14px,black_calc(100%-48px),transparent)]"
       >
         {leads.length === 0 ? (
           <div className="grid h-full place-items-center text-center">
             <div>
-              <p className="font-display text-5xl text-bf">O palco está pronto</p>
-              <p className="mt-1 text-lg text-zinc-400">Cada lead lançado na aba &quot;Ao Vivo&quot; entra aqui na hora.</p>
+              <p className="font-gala text-5xl italic text-bf">O palco está pronto</p>
+              <p className="mt-2 text-lg text-[#8b857a]">Cada lead lançado na aba Ao Vivo aparece aqui na hora.</p>
             </div>
           </div>
         ) : (
           <div
             className={overflow ? "animate-marquee-y" : ""}
-            style={overflow ? { animationDuration: `${Math.max(20, leads.length * 3)}s` } : undefined}
+            style={overflow ? { animationDuration: `${Math.max(24, leads.length * 3.2)}s` } : undefined}
           >
-            <ul ref={list} className="flex flex-col gap-2 pb-2 pt-1">
+            <ul ref={list} className="pb-1">
               {leads.map((l) => (
                 <LeadRow key={l.id} l={l} highlight={highlight === l.id} />
               ))}
             </ul>
             {overflow && (
-              <ul aria-hidden className="flex flex-col gap-2 pb-2 pt-1">
+              <ul aria-hidden className="pb-1">
                 {leads.map((l) => (
                   <LeadRow key={`b-${l.id}`} l={l} highlight={highlight === l.id} />
                 ))}
@@ -414,41 +438,38 @@ function LeadBoard({
   );
 }
 
-// ---------------- coluna da direita ----------------
+// ---------------- coxia da direita ----------------
 
-/** Closers: cada venda é uma ficha na fileira de quem fechou. */
-function Closers({ rows, goal }: { rows: Person[]; goal: number }) {
+function Closers({ rows }: { rows: Person[] }) {
   return (
-    <section className="rounded-[1.5rem] border border-bf/25 bg-[linear-gradient(180deg,rgba(248,190,25,0.08),rgba(10,10,10,0.6))] p-5">
-      <h2 className="mb-3 flex items-center gap-2 font-display text-3xl tracking-wide text-white">
-        <Trophy size={24} className="text-bf" /> Closers
-      </h2>
+    <section>
+      <h2 className="font-gala text-[44px] italic leading-none text-[#f4efe6]">Closers</h2>
       {rows.length === 0 ? (
-        <p className="text-zinc-500">As fichas de cada closer aparecem aqui.</p>
+        <p className="mt-3 text-[#8b857a]">As lâmpadas de cada closer acendem aqui.</p>
       ) : (
-        <ol className="flex flex-col gap-4">
-          {rows.slice(0, 4).map((r, i) => (
-            <li key={r.name}>
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="flex min-w-0 items-center gap-2 text-xl font-bold text-white">
-                  {i === 0 && r.vendas > 0 && <Crown size={18} className="shrink-0 text-bf" />}
+        <ol className="mt-1">
+          {rows.slice(0, 3).map((r, i) => (
+            <li key={r.name} className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4 border-b border-white/[0.06] py-2.5">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-2xl font-semibold text-[#f4efe6]">
                   <span className="truncate">{r.name}</span>
+                  {i === 0 && r.vendas > 0 && <Crown size={18} strokeWidth={1.75} className="shrink-0 text-bf" />}
                 </p>
-                <p className="shrink-0 text-sm text-zinc-400">
-                  <b className="font-display text-4xl leading-none text-bf">{r.vendas}</b> {r.vendas === 1 ? "venda" : "vendas"}
+                <div className="mt-2 flex min-h-3.5 flex-wrap gap-1.5">
+                  {Array.from({ length: r.vendas }, (_, k) => (
+                    <span key={k} className={`size-3.5 rounded-full ${k < r.franquias ? "bulb-gold" : "bulb-silver"} !animate-none`} />
+                  ))}
+                </div>
+                <p className="mt-1.5 text-sm text-[#8b857a]">
+                  {r.leads - r.vendas > 0
+                    ? `${extenso(r.leads - r.vendas)} em negociação`
+                    : r.leads > 0
+                      ? "todos os leads fechados"
+                      : ""}
                 </p>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {Array.from({ length: Math.max(goal, r.vendas) }, (_, k) => (
-                  <span
-                    key={k}
-                    className={`size-5 rounded-full ${k < r.vendas ? (k < r.franquias ? "coin coin-franquia" : "coin") : "coin-empty"}`}
-                  />
-                ))}
-              </div>
-              <p className="mt-1 text-xs text-zinc-500">
-                {r.reservas} {r.reservas === 1 ? "reserva" : "reservas"}, {r.franquias} {r.franquias === 1 ? "franquia" : "franquias"},{" "}
-                {r.leads} {r.leads === 1 ? "lead" : "leads"} na mão
+              <p className={`font-gala text-[84px] leading-[0.8] tabular-nums ${r.vendas > 0 ? "gala-gold" : "text-[#3d3a35]"}`}>
+                {fmt(r.vendas)}
               </p>
             </li>
           ))}
@@ -458,34 +479,25 @@ function Closers({ rows, goal }: { rows: Person[]; goal: number }) {
   );
 }
 
-/** SDRs: quem trouxe mais gente para o palco. */
-function Sdrs({ rows, className = "" }: { rows: Person[]; className?: string }) {
+function Scouts({ rows }: { rows: Person[] }) {
   const max = Math.max(1, ...rows.map((r) => r.leads));
   return (
-    <section className={`rounded-[1.5rem] border border-sky-400/20 bg-zinc-950/70 p-5 ${className}`}>
-      <h2 className="mb-3 font-display text-3xl tracking-wide text-white">Quem trouxe</h2>
+    <section>
+      <h2 className="font-gala text-[34px] italic leading-none text-[#f4efe6]">Quem trouxe</h2>
       {rows.length === 0 ? (
-        <p className="text-zinc-500">Os SDRs aparecem com o primeiro lead.</p>
+        <p className="mt-3 text-[#8b857a]">Os SDRs aparecem com o primeiro lead.</p>
       ) : (
-        <ol className="flex flex-col gap-4">
-          {rows.slice(0, 5).map((r) => (
-            <li key={r.name} className="grid grid-cols-[7rem_minmax(0,1fr)_auto] items-center gap-3">
-              <span className="truncate text-lg font-semibold text-zinc-100">{first(r.name)}</span>
-              <span className="h-3 overflow-hidden rounded-full bg-zinc-800">
+        <ol className="mt-3 flex flex-col gap-2.5">
+          {rows.slice(0, 3).map((r) => (
+            <li key={r.name} className="grid grid-cols-[7.5rem_minmax(0,1fr)_3.5rem] items-center gap-4">
+              <span className="truncate text-lg text-[#f4efe6]">{first(r.name)}</span>
+              <span className="relative h-px bg-white/10">
                 <span
-                  className="animate-bar block h-full rounded-full bg-gradient-to-r from-sky-600 to-sky-300"
+                  className="animate-bar absolute inset-y-[-1px] left-0 rounded-full bg-gradient-to-r from-[#6b7580] to-[#e6ebf1]"
                   style={{ width: `${(r.leads / max) * 100}%` }}
                 />
               </span>
-              <span className="text-sm text-zinc-400">
-                <b className="font-display text-3xl leading-none text-white">{r.leads}</b>
-                <span className="ml-1">{r.leads === 1 ? "lead" : "leads"}</span>
-                {r.vendas > 0 && (
-                  <span className="ml-1 text-bf">
-                    , {r.vendas} {r.vendas === 1 ? "venda" : "vendas"}
-                  </span>
-                )}
-              </span>
+              <span className="text-right font-gala text-3xl leading-none tabular-nums text-[#f4efe6]">{r.leads}</span>
             </li>
           ))}
         </ol>
@@ -494,61 +506,63 @@ function Sdrs({ rows, className = "" }: { rows: Person[]; className?: string }) 
   );
 }
 
-// ---------------- alertas ----------------
+// ---------------- anúncios ----------------
 
-function FunilToast({ alert, onDone }: { alert: FunilAlert; onDone: () => void }) {
+function Announcement({ alert, onDone }: { alert: FunilAlert; onDone: () => void }) {
+  const ms = alert.kind === "meta" ? 9500 : alert.kind === "lead" ? 5500 : 8000;
   useEffect(() => {
-    const t = setTimeout(onDone, alert.kind === "meta" ? 9000 : alert.kind === "lead" ? 5500 : 7500);
+    const t = setTimeout(onDone, ms);
     return () => clearTimeout(t);
-  }, [alert, onDone]);
+  }, [ms, onDone]);
+  const style = { "--announce-ms": `${ms}ms` } as React.CSSProperties;
 
   if (alert.kind === "meta")
     return (
-      <div className="animate-toast fixed left-1/2 top-1/3 z-50 w-[min(92vw,1000px)] -translate-x-1/2" style={{ animationDuration: "9s" }}>
-        <div className="gold-bar rounded-3xl p-1.5 shadow-[0_0_140px_rgba(255,215,0,0.8)]">
-          <div className="flex items-center gap-6 rounded-[1.25rem] bg-ink px-8 py-7">
-            <Trophy className="animate-float shrink-0 text-[#ffd700]" size={96} />
-            <div>
-              <p className="gold-text font-display text-7xl leading-none">Meta batida!</p>
-              <p className="mt-2 font-display text-4xl tracking-wide text-white">{fmt(alert.vendas)} vendas na Black 🚀</p>
-            </div>
-          </div>
+      <div className="announce fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-[3px]" style={style}>
+        <div className="text-center">
+          <p className="font-gala text-4xl italic text-[#8b857a]">e a noite é nossa</p>
+          <p className="font-gala gala-gold text-[220px] italic leading-none">Meta batida</p>
+          <p className="mt-2 font-gala text-5xl text-[#f4efe6]">{vendas(alert.vendas)} na Black Friday</p>
         </div>
       </div>
     );
 
   const { lead, kind, left } = alert;
-  const sale = kind !== "lead";
-  const title = kind === "franquia" ? "Franquia vendida!" : kind === "reserva" ? "Reserva assinada! +1 venda" : "Novo lead no funil";
-  const who = kind === "lead" ? lead.sdr || lead.closer : lead.closer || lead.sdr;
-  const verb = kind === "lead" ? "trouxe" : "fechou";
-  return (
-    <div className="animate-toast fixed left-1/2 top-4 z-50 w-[min(92vw,820px)]">
-      <div className={`${sale ? "gold-bar" : "bg-sky-400"} rounded-2xl p-1 shadow-[0_0_80px_rgba(248,190,25,0.55)]`}>
-        <div className={`flex items-center gap-5 rounded-xl px-6 py-4 ${sale ? "bg-bf text-ink" : "bg-ink"}`}>
-          {kind === "franquia" ? (
-            <Crown className="shrink-0" size={54} />
-          ) : kind === "reserva" ? (
-            <PartyPopper className="shrink-0" size={50} />
-          ) : (
-            <UserPlus className="shrink-0 text-sky-300" size={42} />
-          )}
-          <div className="min-w-0">
-            <p className={`font-display leading-tight tracking-wide ${sale ? "text-5xl" : "text-4xl text-sky-300"}`}>{title}</p>
-            <p className="truncate text-lg">
-              <b>{who || "Alguém"}</b> {verb} <b>{lead.nome}</b>
-              <span className={sale ? "text-ink/70" : "text-zinc-400"}>
-                {lead.cidade && `, ${lead.cidade}${lead.uf ? `/${lead.uf}` : ""}`}
-                {lead.modelo && ` · ${lead.modelo}`}
-              </span>
-            </p>
-            {sale && left > 0 && (
-              <p className="text-base font-bold">
-                Faltam {fmt(left)} {left === 1 ? "venda" : "vendas"} para a meta
-              </p>
-            )}
-          </div>
+  if (kind === "lead")
+    return (
+      <div className="announce pointer-events-none fixed inset-x-0 bottom-0 z-50" style={style}>
+        <div className="h-28 bg-gradient-to-t from-black to-transparent" />
+        <div className="border-t border-[#d5dbe2]/25 bg-black px-16 pb-12 pt-6">
+        <p className="font-gala text-2xl italic text-[#d5dbe2]">Entrou no funil</p>
+        <p className="font-gala text-8xl leading-none text-[#f4efe6]">{lead.nome}</p>
+        <p className="mt-2 text-xl text-[#8b857a]">
+          {[lead.sdr && `trazido por ${lead.sdr}`, place(lead), lead.modelo].filter(Boolean).join(", ")}
+        </p>
         </div>
+      </div>
+    );
+
+  const franquia = kind === "franquia";
+  return (
+    <div className="announce pointer-events-none fixed inset-x-0 bottom-0 z-50" style={style}>
+      <div className="h-32 bg-gradient-to-t from-black to-transparent" />
+      <div
+        className={`flex items-end justify-between gap-10 border-t bg-black px-16 pb-14 pt-8 ${
+          franquia ? "border-bf/40" : "border-[#d5dbe2]/30"
+        }`}
+      >
+        <div className="min-w-0">
+          <p className={`font-gala text-4xl italic ${franquia ? "text-bf" : "text-[#e6ebf1]"}`}>
+            {franquia ? "E a franquia vai para" : "Reserva assinada por"}
+          </p>
+          <p className={`font-gala truncate text-[150px] leading-[0.95] ${franquia ? "gala-gold" : "gala-silver"}`}>{lead.nome}</p>
+          <p className="mt-2 text-2xl text-[#c9c2b4]">
+            {[lead.closer && `fechada por ${lead.closer}`, place(lead), lead.modelo].filter(Boolean).join(", ")}
+          </p>
+        </div>
+        <p className="shrink-0 pb-3 text-right font-gala text-3xl italic text-[#8b857a]">
+          {left > 0 ? `faltam ${vendas(left)}` : "meta batida"}
+        </p>
       </div>
     </div>
   );
@@ -591,8 +605,8 @@ export default function FunilDashboard() {
     const franquia = alerts.some((a) => a.kind === "franquia");
     const reserva = alerts.some((a) => a.kind === "reserva");
     if (meta) fireworksShow(12000);
-    else if (franquia) confettiBurst(6000);
-    else if (reserva) confettiBurst(4000);
+    else if (franquia) confettiBurst(5000, GALA_CONFETTI);
+    else if (reserva) confettiBurst(2500, GALA_CONFETTI);
     if (!soundRef.current) return;
     if (meta) playCelebration(getAudio(), "finale");
     else if (franquia || reserva) playVictory(getAudio());
@@ -604,23 +618,20 @@ export default function FunilDashboard() {
   const current = queue[0];
   const dismiss = useCallback(() => setQueue((q) => q.slice(1)), []);
   const highlight = current && current.kind !== "meta" ? current.lead.id : null;
-  const flipId = current && (current.kind === "reserva" || current.kind === "franquia") ? current.lead.id : null;
+  const igniteId = current && (current.kind === "reserva" || current.kind === "franquia") ? current.lead.id : null;
 
   // modo de teste: ?simular=1 e teclas L (lead), R (reserva), F (franquia), M (meta)
   useEffect(() => {
     if (!sim) return;
-    const pick = (): FunilLead => {
-      // usa um lead de verdade da tela quando houver (para ver a ficha girar)
-      const open = stats?.list.find((l) => !isSale(l));
-      return open ?? { id: `sim-${Date.now()}`, row: 0, nome: "Lead T.", cidade: "Curitiba", uf: "PR", sdr: "Valmor", closer: "Roberson", modelo: "Loja", reserva: true, franquia: false };
-    };
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       const goal = data?.goal ?? 10;
+      const open = stats?.list.find((l) => !isSale(l));
       const lastSale = stats?.sales[stats.sales.length - 1];
-      if (k === "l") onAlerts([{ kind: "lead", lead: pick(), left: 7 }]);
-      else if (k === "r" && lastSale) onAlerts([{ kind: "reserva", lead: lastSale, left: Math.max(0, goal - (stats?.vendas ?? 0)) }]);
-      else if (k === "f" && lastSale) onAlerts([{ kind: "franquia", lead: lastSale, left: Math.max(0, goal - (stats?.vendas ?? 0)) }]);
+      const left = Math.max(0, goal - (stats?.vendas ?? 0));
+      if (k === "l" && open) onAlerts([{ kind: "lead", lead: open, left }]);
+      else if (k === "r" && lastSale) onAlerts([{ kind: "reserva", lead: lastSale, left }]);
+      else if (k === "f" && lastSale) onAlerts([{ kind: "franquia", lead: lastSale, left }]);
       else if (k === "m") onAlerts([{ kind: "meta", vendas: goal, goal }]);
     };
     window.addEventListener("keydown", onKey);
@@ -651,107 +662,144 @@ export default function FunilDashboard() {
   }, [idle]);
 
   const { staged, w, h } = useStaged();
-  const done = !!(stats && data && stats.vendas >= data.goal);
+  const goal = data?.goal ?? 10;
+  const done = !!(stats && stats.vendas >= goal);
+  const last = stats?.sales[stats.sales.length - 1];
+  const left = stats ? Math.max(0, goal - stats.vendas) : goal;
 
   const content = (
     <main
-      className={
-        staged
-          ? "flex h-[1080px] w-[1920px] flex-col gap-4 overflow-hidden px-6 pb-6"
-          : "mx-auto flex w-full max-w-[1920px] flex-col gap-4 px-4 pb-6 sm:px-6"
-      }
+      className={`relative isolate ${
+        staged ? "flex h-[1080px] w-[1920px] flex-col overflow-hidden px-14 pb-8" : "mx-auto flex w-full max-w-[1920px] flex-col px-5 pb-10"
+      }`}
     >
+      {/* a sala: preto, com o foco quente vindo de cima do palco */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 bg-black [background-image:radial-gradient(52%_46%_at_50%_30%,rgba(248,190,25,0.13),transparent_70%),radial-gradient(30%_22%_at_50%_0%,rgba(255,236,170,0.12),transparent_80%)]"
+      />
+
       {soundBlocked && (
         <button
           onClick={() => getAudio()}
-          className="fixed bottom-3 right-3 z-40 flex items-center gap-1.5 rounded-full border border-amber-400/60 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200"
+          className="fixed bottom-3 right-3 z-40 flex items-center gap-1.5 rounded-full border border-bf/40 bg-black/80 px-3 py-1 text-xs text-[#c9c2b4]"
         >
           <VolumeX size={13} /> Som bloqueado pelo navegador. Clique na tela para ativar.
         </button>
       )}
       {sim && (
-        <div className="fixed bottom-3 left-3 z-40 rounded-full border border-sky-400/50 bg-sky-500/15 px-3 py-1 text-xs font-semibold text-sky-200">
+        <div className="fixed bottom-3 left-3 z-40 rounded-full border border-white/20 bg-black/80 px-3 py-1 text-xs text-[#c9c2b4]">
           Simulação: L lead, R reserva, F franquia, M meta batida
         </div>
       )}
       {data?.telao && <TelaoCard meta={data.telao} />}
-      {current && <FunilToast key={current.kind === "meta" ? "meta" : `${current.kind}-${current.lead.id}`} alert={current} onDone={dismiss} />}
+      {current && (
+        <Announcement key={current.kind === "meta" ? "meta" : `${current.kind}-${current.lead.id}`} alert={current} onDone={dismiss} />
+      )}
 
-      <header className="flex flex-wrap items-center justify-between gap-4 pt-4">
-        <Image src="/logo-helpmultas.webp" alt="HelpMultas" width={2000} height={592} priority className="h-10 w-auto sm:h-12" />
-        <div className={staged ? "text-center" : "order-3 w-full text-center lg:order-none lg:w-auto"}>
-          <h1 className="font-display text-5xl leading-none tracking-wide sm:text-6xl">
-            {done ? <span className="gold-text">BLACK FRIDAY</span> : <><span className="glow-text text-bf">BLACK</span> FRIDAY</>}
-          </h1>
-          <p className="mt-1 text-sm font-semibold text-zinc-400">{done ? "Meta de vendas batida 🏆" : "Funil ao vivo"}</p>
+      {/* ---------- topo ---------- */}
+      <header className={`grid items-center gap-4 ${staged ? "grid-cols-[1fr_auto_1fr] pt-5" : "grid-cols-1 justify-items-center pt-5 text-center"}`}>
+        <Image src="/logo-helpmultas.webp" alt="HelpMultas" width={2000} height={592} priority className="h-9 w-auto" />
+        <div className="text-center">
+          <h1 className={`font-gala leading-none text-[#f4efe6] ${staged ? "text-[60px]" : "text-5xl"}`}>Black Friday</h1>
+          <p className="mt-1 text-sm text-[#8b857a]">{done ? "A meta de vendas foi batida" : "O funil de vendas, ao vivo"}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end gap-1.5">
-            <Countdown now={now} />
-            <LiveBadge now={now} fetchedAt={data?.fetchedAt ?? null} error={error} demo={data?.source === "demo"} />
+        <div className={`flex items-center gap-4 ${staged ? "justify-end" : "flex-col"}`}>
+          <div className={`flex flex-col gap-1 ${staged ? "items-end" : "items-center"}`}>
+            <NightClock now={now} />
+            <LiveNote now={now} fetchedAt={data?.fetchedAt ?? null} error={error} demo={data?.source === "demo"} />
           </div>
-          <div className="idle-hide flex flex-col gap-1.5">
+          <div className="idle-hide flex gap-1.5">
             <button
               onClick={() => setSound((s) => !s)}
               title={sound ? "Desativar som" : "Ativar som"}
-              className="rounded-lg border border-line p-2 text-zinc-400 hover:border-bf hover:text-bf"
+              className="rounded-full p-2 text-[#8b857a] hover:text-bf"
             >
-              {sound ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              {sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
             </button>
             <button
               onClick={() => document.documentElement.requestFullscreen?.().catch(() => {})}
               title="Tela cheia (TV)"
-              className="rounded-lg border border-line p-2 text-zinc-400 hover:border-bf hover:text-bf"
+              className="rounded-full p-2 text-[#8b857a] hover:text-bf"
             >
-              <Maximize size={16} />
+              <Maximize size={18} />
             </button>
           </div>
         </div>
       </header>
 
       {!stats || !data ? (
-        <div className="panel grid h-[60vh] place-items-center text-zinc-400">
+        <div className="grid flex-1 place-items-center py-24 text-center">
           {error ? (
-            <div className="max-w-xl text-center">
-              <p className="font-display text-3xl text-bf">Não consegui ler a aba &quot;Ao Vivo&quot;</p>
-              <p className="mt-2 text-sm text-zinc-400">{error}</p>
+            <div className="max-w-xl">
+              <p className="font-gala text-5xl italic text-bf">A aba Ao Vivo não respondeu</p>
+              <p className="mt-3 text-[#8b857a]">{error}</p>
             </div>
           ) : (
-            <p className="font-display animate-pulse text-3xl tracking-wide text-bf">Montando o palco…</p>
+            <p className="font-gala animate-pulse text-5xl italic text-bf">Acendendo o palco…</p>
           )}
         </div>
       ) : (
         <>
-          <div className={staged ? "h-[392px] shrink-0" : ""}>
-            <Stage
-              sales={stats.sales}
-              goal={data.goal}
-              reservas={stats.reservas}
-              franquias={stats.franquias}
-              total={stats.total}
-              flipId={flipId}
-              compact={!staged}
-            />
-          </div>
-
-          <div className={staged ? "grid min-h-0 flex-1 grid-cols-12 gap-4" : "grid items-start gap-4 xl:grid-cols-12"}>
-            <div className={staged ? "col-span-8 flex min-h-0" : "flex min-w-0 xl:col-span-8"}>
-              <LeadBoard
-                leads={stats.list}
-                modelos={stats.modelos}
-                highlight={highlight}
-                className={staged ? "flex-1" : "h-[70vh] flex-1"}
+          {/* ---------- o palco: prata | arco | ouro ---------- */}
+          <section
+            className={
+              staged
+                ? "mt-1 grid h-[452px] shrink-0 grid-cols-[1fr_780px_1fr] items-end gap-12"
+                : "mt-8 grid grid-cols-2 gap-x-6 gap-y-8"
+            }
+          >
+            <div className={staged ? "justify-self-end pb-24" : "order-2"}>
+              <Wing
+                value={stats.reservas}
+                label="Reservas"
+                note="termos assinados, em prata"
+                metal="gala-silver"
+                staged={staged}
+                align={staged ? "right" : "left"}
               />
             </div>
-            <div className={staged ? "col-span-4 flex min-h-0 flex-col gap-4" : "flex min-w-0 flex-col gap-4 xl:col-span-4"}>
-              <Closers rows={stats.closers} goal={Math.min(data.goal, 10)} />
-              <Sdrs rows={stats.sdrs} className={staged ? "flex-1" : ""} />
-              {!data.columns.reserva || !data.columns.franquia ? (
-                <p className="flex items-center gap-1.5 text-xs text-amber-400">
-                  <FileSignature size={13} /> Confira as colunas &quot;Termo de Reserva&quot; e &quot;Taxa de Franquia&quot; na aba.
-                </p>
-              ) : null}
+            <div className={staged ? "self-end" : "order-1 col-span-2"}>
+              <Marquee sales={stats.sales} goal={goal} igniteId={igniteId} staged={staged} />
+              <p className={`mt-4 text-center font-gala italic text-[#c9c2b4] ${staged ? "text-[28px] leading-tight" : "text-2xl"}`}>
+                {done ? "Meta batida. A noite é nossa." : `Faltam ${vendas(left)} para fechar a noite.`}
+              </p>
+              <p className={`mt-1 text-center text-[#8b857a] ${staged ? "text-base" : "text-sm"}`}>
+                {last ? (
+                  <>
+                    Última venda: <span className="text-[#f4efe6]">{last.nome}</span>
+                    {last.closer && <>, fechada por {last.closer}</>}
+                  </>
+                ) : (
+                  "Conta como venda o termo de reserva ou a taxa de franquia."
+                )}
+              </p>
             </div>
+            <div className={staged ? "justify-self-start pb-24" : "order-3"}>
+              <Wing value={stats.franquias} label="Franquias" note="taxas pagas, em ouro" metal="gala-gold" staged={staged} align="left" />
+            </div>
+          </section>
+
+          <div className={staged ? "mb-4 mt-6" : "my-10"}>
+            <Ornament />
+          </div>
+
+          {/* ---------- créditos | closers ---------- */}
+          <div className={staged ? "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_560px] gap-14" : "flex flex-col gap-12"}>
+            <Credits
+              leads={stats.list}
+              vendas={stats.vendas}
+              modelos={stats.modelos}
+              highlight={highlight}
+              className={staged ? "" : "h-[70vh]"}
+            />
+            <aside className={`flex min-h-0 flex-col gap-6 ${staged ? "border-l border-white/[0.08] pl-14" : ""}`}>
+              <Closers rows={stats.closers} />
+              <Scouts rows={stats.sdrs} />
+              {!data.columns.reserva || !data.columns.franquia ? (
+                <p className="text-sm text-amber-400">Confira as colunas Termo de Reserva e Taxa de Franquia na aba.</p>
+              ) : null}
+            </aside>
           </div>
         </>
       )}

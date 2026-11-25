@@ -20,11 +20,11 @@ Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o c
 ### Funil ao vivo (`/funil`)
 Lê a aba **"Ao Vivo"** da mesma planilha, onde os vendedores lançam cada lead da Black. Colunas: Candidato, Whatsapp, Cidade, UF, Responsável (SDR), Responsável (Closer), Modelo, Termo de Reserva, Taxa de Franquia (a ordem não importa).
 - **Venda** = lead com **Termo de Reserva** *ou* **Taxa de Franquia** preenchido ("Sim", valor ou data; vazio, "Não", "-" e "0" não contam). Conta uma vez por lead, mesmo com os dois. **Meta: 10** (`META_VENDAS`).
-- **O palco:** placar dourado sob dois holofotes e **10 fichas**. Cada venda cunha uma ficha (na ordem da planilha) com o nome do lead e de quem fechou; franquia ganha coroa. A ficha nova gira quando entra.
+- **A grande noite:** um letreiro de teatro. No centro, um **arco de 10 lâmpadas** em volta do número de vendas: cada venda acende uma (na ordem da planilha), **prata para reserva e ouro para franquia**, e a nova acende com um clarão. Nas laterais, reservas (prata) e franquias (ouro). Tipografia Bodoni Moda (só nesta tela).
 - Reservas e franquias também aparecem separadas, junto com o total de leads e quantos % viraram venda.
-- **Quem está no funil:** todos os leads numa lista que rola sozinha quando não cabe na tela — vendas no topo (franquia, depois reserva), depois os mais novos. Cada linha mostra a **jornada lead → reserva → franquia** acesa, o modelo e a dupla SDR → closer; o topo traz o total de Loja × Home Based.
-- **Closers** com uma fileira de fichas cada (por vendas) e **Quem trouxe** (SDRs, por leads).
-- **Alertas:** "NOVO LEAD NO FUNIL!", "RESERVA ASSINADA! +1 VENDA" e "FRANQUIA VENDIDA!" (confete + som) e "META BATIDA!" com fogos nas 10. Cada lead é anunciado uma vez por tela aberta.
+- **Quem está no funil:** todos os leads passando como créditos de cinema quando não cabem na tela — vendas no topo (franquia, depois reserva), depois os mais novos. Cada linha mostra a **jornada lead → reserva → franquia** acesa, o modelo, o closer e quem trouxe; o topo traz o total, a conversão e Loja × Home Based.
+- **Closers** com as lâmpadas de cada venda e **Quem trouxe** (SDRs, por leads).
+- **Anúncios:** "Entrou no funil", "Reserva assinada por…" e "E a franquia vai para…" (confete dourado e prata + som), e "Meta batida" com fogos nas 10. Cada lead é anunciado uma vez por tela aberta.
 - O WhatsApp nunca sai do servidor; o candidato aparece como "Maria S.". O telão também aparece aqui.
 - **`/funil?demo=1`** mostra dados de exemplo (com a etiqueta MODO DEMO), para ver a tela antes do primeiro lead. **`/funil?simular=1`** + teclas **L**, **R**, **F**, **M** testa os alertas.
 
