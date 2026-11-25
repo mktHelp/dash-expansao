@@ -14,10 +14,11 @@ Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba
 Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o candidato aparece como "Maria S.".
 
 ### Duas telas
-- **`/` — campanha (direta):** meta de presenças, na mesa, funil, ranking de presenças e fila de follow-up. É a tela da TV.
+- **`/` — funil ao vivo:** é a tela da TV (a TV não troca de link). A mesma tela também abre em `/funil`.
+- **`/presencas` — presenças confirmadas:** meta de presenças, na mesa, funil, ranking de presenças e fila de follow-up (ficava em `/` até a Black).
 - **`/completo` — visão completa:** convites, qualificados, meta de presenças, ranking por leads, etapas no CRM, leads por mês e top estados.
 
-### Funil ao vivo (`/funil`)
+### Funil ao vivo (`/` e `/funil`)
 Lê a aba **"Ao Vivo"** da mesma planilha, onde os vendedores lançam cada lead da Black. Colunas: Candidato, Whatsapp, Cidade, UF, Responsável (SDR), Responsável (Closer), Modelo, Termo de Reserva, Taxa de Franquia (a ordem não importa).
 - **Venda** = lead com **Termo de Reserva** *ou* **Taxa de Franquia** preenchido ("Sim", valor ou data; vazio, "Não", "-" e "0" não contam). Conta uma vez por lead, mesmo com os dois. **Meta: 10** (`META_VENDAS`).
 - **A grande noite, em clima de festa:** um letreiro de teatro com luzes de pista (feixes rosa e turquesa varrendo o fundo). No centro, um **arco de 10 lâmpadas** em volta do número de vendas: as apagadas fazem o pisca-pisca correndo e cada venda acende uma (na ordem da planilha), **turquesa para reserva e ouro para franquia**, com um clarão; o número entra quicando. Nas laterais, reservas (turquesa) e franquias (ouro). Tipografia Fraunces "molenga" (só nesta tela).
@@ -29,7 +30,7 @@ Lê a aba **"Ao Vivo"** da mesma planilha, onde os vendedores lançam cada lead 
 - **`/funil?demo=1`** mostra dados de exemplo (com a etiqueta MODO DEMO), para ver a tela antes do primeiro lead. **`/funil?simular=1`** + teclas **L**, **R**, **F**, **M** testa os alertas.
 
 ### Telão: imagem em todas as telas
-Abra **`/telao`** (no computador ou no celular), entre com a senha, escolha uma imagem ou um **GIF animado** e toque em **Mostrar em todas as telas**. Em até 15 s ela aparece num quadro grande no centro de todas as telas abertas (`/` e `/completo`), com legenda opcional, deixando a meta e o ranking visíveis em volta. Ela fica no ar até alguém tocar em **Remover de todas as telas** (ou mandar outra, que substitui).
+Abra **`/telao`** (no computador ou no celular), entre com a senha, escolha uma imagem ou um **GIF animado** e toque em **Mostrar em todas as telas**. Em até 15 s ela aparece num quadro grande no centro de todas as telas abertas (`/`, `/funil`, `/presencas` e `/completo`), com legenda opcional, deixando a meta e o ranking visíveis em volta. Ela fica no ar até alguém tocar em **Remover de todas as telas** (ou mandar outra, que substitui).
 - A imagem é reduzida no próprio aparelho (até 1920 px, WebP) e guardada no Redis; as telas baixam uma vez por envio.
 - Fotos são reduzidas no próprio aparelho antes de subir. GIFs sobem inteiros (para continuar animados), até **3 MB**: o limite de uma requisição na Vercel é 4,5 MB e o GIF cresce ~33% ao ser enviado.
 - A senha é a variável **`TELAO_SENHA`** na Vercel (o repositório é público, então ela nunca vai para o código). Sem ela, ou sem Redis, a página avisa e o telão fica fechado.
@@ -135,6 +136,6 @@ Na TV: abra o link e clique no botão de tela cheia (canto superior direito). O 
 | `src/lib/watch.ts` | relógio de inatividade (minutos de expediente) e recorde local de reserva |
 | `src/lib/record.ts` | recorde compartilhado no Redis (atualização atômica) |
 | `src/lib/telao.ts`, `src/app/telao`, `src/components/Telao*.tsx` | telão: imagem no centro de todas as telas |
-| `src/lib/funil.ts`, `src/app/funil`, `src/components/Funil.tsx` | funil ao vivo (aba "Ao Vivo") |
+| `src/lib/funil.ts`, `src/app/page.tsx`, `src/app/funil`, `src/components/Funil.tsx` | funil ao vivo (aba "Ao Vivo") |
 | `src/lib/live.ts` | relógio, som e trava de recarga usados pelas duas telas |
 | `src/components/` | interface |
