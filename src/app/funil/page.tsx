@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Bodoni_Moda } from "next/font/google";
+import { Fraunces } from "next/font/google";
 import FunilDashboard from "@/components/Funil";
 
-// Bodoni de gala (com tamanho óptico: os números gigantes ganham o contraste fino)
-const bodoni = Bodoni_Moda({
-  variable: "--font-bodoni",
+// Fraunces "molenga" (SOFT + WONK): serifa de festa, alegre sem ser infantil
+const party = Fraunces({
+  variable: "--font-party",
   subsets: ["latin"],
   style: ["normal", "italic"],
-  axes: ["opsz"],
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 export const metadata: Metadata = {
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 // (SDR), quem está fechando (Closer) e as vendas (reserva ou taxa de franquia).
 export default function FunilPage() {
   return (
-    <div className={bodoni.variable}>
+    <div className={party.variable}>
       <FunilDashboard />
     </div>
   );

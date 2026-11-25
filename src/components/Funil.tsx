@@ -1,8 +1,8 @@
 "use client";
 
-// Funil ao vivo (/funil) — "a grande noite".
+// Funil ao vivo (/funil) — "a grande noite", em clima de festa.
 // Um letreiro de teatro: no centro do palco, um arco de lâmpadas em volta do
-// número de vendas (prata = reserva, ouro = franquia). Nas coxias, reservas e
+// número de vendas (turquesa = reserva, ouro = franquia). Nas coxias, reservas e
 // franquias. Embaixo, os leads passam como créditos de cinema e os closers
 // acumulam lâmpadas. Cada venda é anunciada como numa premiação.
 import Image from "next/image";
@@ -29,7 +29,7 @@ const EXTENSO = [
 const extenso = (n: number) => EXTENSO[n] ?? fmt(n);
 const vendas = (n: number) => `${extenso(n)} ${n === 1 ? "venda" : "vendas"}`;
 
-const GALA_CONFETTI = ["#f8be19", "#ffe6a0", "#ffd700", "#d5dbe2", "#ffffff"];
+const GALA_CONFETTI = ["#f8be19", "#ff5fa2", "#35e0d0", "#ffd700", "#ffffff", "#ff8a3d"];
 
 // ---------------- dados ----------------
 
@@ -157,7 +157,7 @@ function useFunil(onAlerts: (a: FunilAlert[]) => void, demo: boolean) {
 function NightClock({ now }: { now: number }) {
   if (!now) return <p className="text-zinc-500">&nbsp;</p>;
   const left = EVENT_AT - now;
-  if (left <= 0) return <p className="font-gala text-2xl italic text-bf">A grande noite começou</p>;
+  if (left <= 0) return <p className="font-gala text-2xl italic text-bf">A festa começou!</p>;
   const d = Math.floor(left / 86_400_000);
   const h = Math.floor(left / 3_600_000) % 24;
   const m = Math.floor(left / 60_000) % 60;
@@ -165,7 +165,7 @@ function NightClock({ now }: { now: number }) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
     <p className="flex flex-wrap items-baseline justify-center gap-x-3 text-[#8b857a]">
-      <span className="font-gala text-lg italic">a grande noite começa em</span>
+      <span className="font-gala text-lg italic">a festa começa em</span>
       <span className="whitespace-nowrap font-gala text-[2.1rem] leading-none tabular-nums text-[#f4efe6]">
         {d > 0 && (
           <>
@@ -188,7 +188,7 @@ function LiveNote({ now, fetchedAt, error, demo }: { now: number; fetchedAt: num
   const secs = now && fetchedAt ? Math.max(0, Math.round((now - fetchedAt) / 1000)) : null;
   return (
     <p className="flex items-center gap-2 text-sm text-[#8b857a]">
-      {demo && <span className="rounded-full border border-[#d5dbe2]/40 px-2 py-px text-xs text-[#d5dbe2]">dados de exemplo</span>}
+      {demo && <span className="rounded-full border border-[#35e0d0]/40 px-2 py-px text-xs text-[#35e0d0]">dados de exemplo</span>}
       {error ? (
         <span className="flex items-center gap-1.5 text-red-400" title={error}>
           <span className="size-1.5 rounded-full bg-red-500" /> Reconectando à planilha
@@ -208,7 +208,7 @@ function LiveNote({ now, fetchedAt, error, demo }: { now: number; fetchedAt: num
 
 // ---------------- o palco ----------------
 
-/** Arco de lâmpadas (proscênio) em volta do número. Prata = reserva, ouro = franquia. */
+/** Arco de lâmpadas (letreiro) em volta do número. Turquesa = reserva, ouro = franquia. */
 function Marquee({
   sales,
   goal,
@@ -238,16 +238,36 @@ function Marquee({
       </svg>
       {bulbs.map(({ i, x, y }) => {
         const sale = sales[i];
-        const tone = sale ? (sale.franquia ? "bulb-gold" : "bulb-silver") : "bulb-off";
+        const tone = sale ? (sale.franquia ? "bulb-gold" : "bulb-teal") : "bulb-off";
         return (
           <span
             key={i}
             title={sale ? `${sale.nome}${sale.closer ? `, com ${sale.closer}` : ""}` : `venda ${i + 1}`}
             className={`bulb ${size} ${tone} ${sale && sale.id === igniteId ? "bulb-ignite" : ""}`}
-            style={{ left: `${x}%`, top: `${y}%`, animationDelay: sale && sale.id !== igniteId ? `${(i * 0.37) % 3.4}s` : undefined }}
+            style={{
+              left: `${x}%`,
+              top: `${y}%`,
+              animationDelay: !sale ? `${i * 0.16}s` : sale.id !== igniteId ? `${(i * 0.37) % 3.4}s` : undefined,
+            }}
           />
         );
       })}
+      {/* brilhos de festa em volta do número */}
+      {[
+        { l: "30%", t: "38%", c: "text-[#ff5fa2]", d: "0s", s: "text-3xl" },
+        { l: "68%", t: "30%", c: "text-[#35e0d0]", d: "0.8s", s: "text-4xl" },
+        { l: "24%", t: "70%", c: "text-bf", d: "1.6s", s: "text-2xl" },
+        { l: "74%", t: "64%", c: "text-[#ff5fa2]", d: "1.1s", s: "text-2xl" },
+      ].map((p, k) => (
+        <span
+          key={k}
+          aria-hidden
+          className={`sparkle absolute ${p.c} ${staged ? p.s : "text-base"}`}
+          style={{ left: p.l, top: p.t, animationDelay: p.d }}
+        >
+          ✦
+        </span>
+      ))}
       {/* o número, no centro do palco */}
       <div className="absolute inset-x-0 bottom-0 flex items-end justify-center gap-3">
         <span
@@ -276,7 +296,7 @@ function Wing({
   value: number;
   label: string;
   note: string;
-  metal: "gala-gold" | "gala-silver";
+  metal: "gala-gold" | "gala-teal";
   staged: boolean;
   align: "left" | "right";
 }) {
@@ -295,9 +315,9 @@ function Ornament() {
   return (
     <div className="flex items-center gap-3" aria-hidden>
       <span className="h-px flex-1 bg-gradient-to-r from-transparent to-bf/45" />
-      <span className="size-1 rotate-45 bg-bf/60" />
-      <span className="size-2 rotate-45 border border-bf/70" />
-      <span className="size-1 rotate-45 bg-bf/60" />
+      <span className="size-1.5 rounded-full bg-[#ff5fa2]" />
+      <span className="size-2 rotate-45 bg-bf" />
+      <span className="size-1.5 rounded-full bg-[#35e0d0]" />
       <span className="h-px flex-1 bg-gradient-to-l from-transparent to-bf/45" />
     </div>
   );
@@ -312,9 +332,9 @@ function Journey({ l }: { l: FunilLead }) {
   return (
     <div className="flex items-center" aria-label={f ? "Franquia paga" : r ? "Reserva assinada" : "Em negociação"}>
       <span className="size-2.5 shrink-0 rounded-full bg-[#f4efe6]/80" />
-      <span className={`h-px flex-1 ${r ? "bg-gradient-to-r from-[#f4efe6]/70 to-[#d5dbe2]" : "bg-white/10"}`} />
-      <span className={`size-3.5 shrink-0 rounded-full ${r ? "bulb-silver !animate-none" : "border border-white/15"}`} />
-      <span className={`h-px flex-1 ${f ? "bg-gradient-to-r from-[#d5dbe2] to-bf" : "bg-white/10"}`} />
+      <span className={`h-px flex-1 ${r ? "bg-gradient-to-r from-[#f4efe6]/70 to-[#35e0d0]" : "bg-white/10"}`} />
+      <span className={`size-3.5 shrink-0 rounded-full ${r ? "bulb-teal !animate-none" : "border border-white/15"}`} />
+      <span className={`h-px flex-1 ${f ? "bg-gradient-to-r from-[#35e0d0] to-bf" : "bg-white/10"}`} />
       {f ? (
         <Crown size={20} strokeWidth={1.75} className="shrink-0 text-bf drop-shadow-[0_0_10px_rgba(248,190,25,0.9)]" />
       ) : (
@@ -330,7 +350,7 @@ const ROW =
 const WIDE = "hidden sm:block";
 
 function LeadRow({ l, highlight }: { l: FunilLead; highlight: boolean }) {
-  const name = l.franquia ? "text-bf" : l.reserva ? "text-[#e6ebf1]" : "text-[#f4efe6]";
+  const name = l.franquia ? "text-bf" : l.reserva ? "text-[#8ff7ea]" : "text-[#f4efe6]";
   return (
     <li className={`${ROW} border-b border-white/[0.06] px-2 py-3.5 ${highlight ? "animate-flash rounded-lg" : ""}`}>
       <div className="min-w-0">
@@ -386,7 +406,7 @@ function Credits({
           </span>
           {known.map((m) => (
             <span key={m.name} className="flex items-baseline gap-1.5">
-              <span className={`size-2 self-center rounded-full ${m.name === "Loja" ? "bg-bf" : "bg-[#d5dbe2]"}`} />
+              <span className={`size-2 self-center rounded-full ${m.name === "Loja" ? "bg-bf" : "bg-[#35e0d0]"}`} />
               {m.name} <b className="font-gala text-2xl font-normal text-[#f4efe6]">{m.leads}</b>
             </span>
           ))}
@@ -410,7 +430,7 @@ function Credits({
         {leads.length === 0 ? (
           <div className="grid h-full place-items-center text-center">
             <div>
-              <p className="font-gala text-5xl italic text-bf">O palco está pronto</p>
+              <p className="font-gala text-5xl italic text-bf">A pista está aberta!</p>
               <p className="mt-2 text-lg text-[#8b857a]">Cada lead lançado na aba Ao Vivo aparece aqui na hora.</p>
             </div>
           </div>
@@ -457,7 +477,7 @@ function Closers({ rows }: { rows: Person[] }) {
                 </p>
                 <div className="mt-2 flex min-h-3.5 flex-wrap gap-1.5">
                   {Array.from({ length: r.vendas }, (_, k) => (
-                    <span key={k} className={`size-3.5 rounded-full ${k < r.franquias ? "bulb-gold" : "bulb-silver"} !animate-none`} />
+                    <span key={k} className={`size-3.5 rounded-full ${k < r.franquias ? "bulb-gold" : "bulb-teal"} !animate-none`} />
                   ))}
                 </div>
                 <p className="mt-1.5 text-sm text-[#8b857a]">
@@ -493,7 +513,7 @@ function Scouts({ rows }: { rows: Person[] }) {
               <span className="truncate text-lg text-[#f4efe6]">{first(r.name)}</span>
               <span className="relative h-px bg-white/10">
                 <span
-                  className="animate-bar absolute inset-y-[-1px] left-0 rounded-full bg-gradient-to-r from-[#6b7580] to-[#e6ebf1]"
+                  className="animate-bar absolute inset-y-[-1px] left-0 rounded-full bg-gradient-to-r from-[#0f9c8c] to-[#8ff7ea]"
                   style={{ width: `${(r.leads / max) * 100}%` }}
                 />
               </span>
@@ -520,9 +540,9 @@ function Announcement({ alert, onDone }: { alert: FunilAlert; onDone: () => void
     return (
       <div className="announce fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-[3px]" style={style}>
         <div className="text-center">
-          <p className="font-gala text-4xl italic text-[#8b857a]">e a noite é nossa</p>
+          <p className="font-gala text-4xl italic text-[#8b857a]">é festa!</p>
           <p className="font-gala gala-gold text-[220px] italic leading-none">Meta batida</p>
-          <p className="mt-2 font-gala text-5xl text-[#f4efe6]">{vendas(alert.vendas)} na Black Friday</p>
+          <p className="mt-2 font-gala text-5xl text-[#f4efe6]">{vendas(alert.vendas)} na Black Friday 🎉</p>
         </div>
       </div>
     );
@@ -532,8 +552,8 @@ function Announcement({ alert, onDone }: { alert: FunilAlert; onDone: () => void
     return (
       <div className="announce pointer-events-none fixed inset-x-0 bottom-0 z-50" style={style}>
         <div className="h-28 bg-gradient-to-t from-black to-transparent" />
-        <div className="border-t border-[#d5dbe2]/25 bg-black px-16 pb-12 pt-6">
-        <p className="font-gala text-2xl italic text-[#d5dbe2]">Entrou no funil</p>
+        <div className="border-t border-[#35e0d0]/25 bg-black px-16 pb-12 pt-6">
+        <p className="font-gala text-2xl italic text-[#35e0d0]">Chegou gente nova no funil 👋</p>
         <p className="font-gala text-8xl leading-none text-[#f4efe6]">{lead.nome}</p>
         <p className="mt-2 text-xl text-[#8b857a]">
           {[lead.sdr && `trazido por ${lead.sdr}`, place(lead), lead.modelo].filter(Boolean).join(", ")}
@@ -548,14 +568,14 @@ function Announcement({ alert, onDone }: { alert: FunilAlert; onDone: () => void
       <div className="h-32 bg-gradient-to-t from-black to-transparent" />
       <div
         className={`flex items-end justify-between gap-10 border-t bg-black px-16 pb-14 pt-8 ${
-          franquia ? "border-bf/40" : "border-[#d5dbe2]/30"
+          franquia ? "border-bf/40" : "border-[#35e0d0]/30"
         }`}
       >
         <div className="min-w-0">
-          <p className={`font-gala text-4xl italic ${franquia ? "text-bf" : "text-[#e6ebf1]"}`}>
-            {franquia ? "E a franquia vai para" : "Reserva assinada por"}
+          <p className={`font-gala text-4xl italic ${franquia ? "text-bf" : "text-[#8ff7ea]"}`}>
+            {franquia ? "E a franquia vai para… 🎉" : "Reserva garantida! 🥂"}
           </p>
-          <p className={`font-gala truncate text-[150px] leading-[0.95] ${franquia ? "gala-gold" : "gala-silver"}`}>{lead.nome}</p>
+          <p className={`font-gala truncate text-[150px] leading-[0.95] ${franquia ? "gala-gold" : "gala-teal"}`}>{lead.nome}</p>
           <p className="mt-2 text-2xl text-[#c9c2b4]">
             {[lead.closer && `fechada por ${lead.closer}`, place(lead), lead.modelo].filter(Boolean).join(", ")}
           </p>
@@ -676,7 +696,7 @@ export default function FunilDashboard() {
       {/* a sala: preto, com o foco quente vindo de cima do palco */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-black [background-image:radial-gradient(52%_46%_at_50%_30%,rgba(248,190,25,0.13),transparent_70%),radial-gradient(30%_22%_at_50%_0%,rgba(255,236,170,0.12),transparent_80%)]"
+        className="party-room pointer-events-none absolute inset-0 -z-10 overflow-hidden"
       />
 
       {soundBlocked && (
@@ -702,7 +722,7 @@ export default function FunilDashboard() {
         <Image src="/logo-helpmultas.webp" alt="HelpMultas" width={2000} height={592} priority className="h-9 w-auto" />
         <div className="text-center">
           <h1 className={`font-gala leading-none text-[#f4efe6] ${staged ? "text-[60px]" : "text-5xl"}`}>Black Friday</h1>
-          <p className="mt-1 text-sm text-[#8b857a]">{done ? "A meta de vendas foi batida" : "O funil de vendas, ao vivo"}</p>
+          <p className="mt-1 text-sm text-[#8b857a]">{done ? "Meta batida, festa completa!" : "A festa das vendas, ao vivo"}</p>
         </div>
         <div className={`flex items-center gap-4 ${staged ? "justify-end" : "flex-col"}`}>
           <div className={`flex flex-col gap-1 ${staged ? "items-end" : "items-center"}`}>
@@ -736,7 +756,7 @@ export default function FunilDashboard() {
               <p className="mt-3 text-[#8b857a]">{error}</p>
             </div>
           ) : (
-            <p className="font-gala animate-pulse text-5xl italic text-bf">Acendendo o palco…</p>
+            <p className="font-gala animate-pulse text-5xl italic text-bf">Acendendo as luzes…</p>
           )}
         </div>
       ) : (
@@ -753,8 +773,8 @@ export default function FunilDashboard() {
               <Wing
                 value={stats.reservas}
                 label="Reservas"
-                note="termos assinados, em prata"
-                metal="gala-silver"
+                note="termos de reserva assinados"
+                metal="gala-teal"
                 staged={staged}
                 align={staged ? "right" : "left"}
               />
@@ -762,7 +782,7 @@ export default function FunilDashboard() {
             <div className={staged ? "self-end" : "order-1 col-span-2"}>
               <Marquee sales={stats.sales} goal={goal} igniteId={igniteId} staged={staged} />
               <p className={`mt-4 text-center font-gala italic text-[#c9c2b4] ${staged ? "text-[28px] leading-tight" : "text-2xl"}`}>
-                {done ? "Meta batida. A noite é nossa." : `Faltam ${vendas(left)} para fechar a noite.`}
+                {done ? "Meta batida! Que noite! 🎉" : `Faltam ${vendas(left)}. Bora acender esse letreiro!`}
               </p>
               <p className={`mt-1 text-center text-[#8b857a] ${staged ? "text-base" : "text-sm"}`}>
                 {last ? (
@@ -776,7 +796,7 @@ export default function FunilDashboard() {
               </p>
             </div>
             <div className={staged ? "justify-self-start pb-24" : "order-3"}>
-              <Wing value={stats.franquias} label="Franquias" note="taxas pagas, em ouro" metal="gala-gold" staged={staged} align="left" />
+              <Wing value={stats.franquias} label="Franquias" note="taxas de franquia pagas" metal="gala-gold" staged={staged} align="left" />
             </div>
           </section>
 
