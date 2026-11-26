@@ -557,7 +557,9 @@ export default function Fechamento() {
   const watch = data?.reativacao ? { ...data.reativacao, shared: !data.reativacaoLocal } : null;
   const idleMin = watch && now ? (forceAlarm ? ALERT_REATIVACAO_MIN + forceAlarm : workMinutes(watch.at, now)) : 0;
   const working = forceAlarm > 0 || (now ? isWorkTime(now) : true);
-  const alarm = !!watch && working && idleMin >= ALERT_REATIVACAO_MIN;
+  // todo mundo já foi trabalhado (reativado ou descartado): não há o que cobrar
+  const allDone = !!stats && stats.falt.length > 0 && stats.reativados >= stats.falt.length;
+  const alarm = !!watch && working && !allDone && idleMin >= ALERT_REATIVACAO_MIN;
 
   // modo de teste: ?simular=1 e teclas V (venda), R (reativado)
   useEffect(() => {
@@ -768,7 +770,13 @@ export default function Fechamento() {
           <p className="mt-2 text-[15px] text-neutral-400">Quem tinha COF e faltou na Black. Cada um que voltar conta aqui.</p>
           {watch && (
             <div className="mt-1.5">
-              <ReactivationClock minutes={idleMin} working={working} late={alarm} shared={watch.shared} />
+              {allDone ? (
+                <p className="flex items-center gap-1.5 text-[15px] font-bold text-[#34d399]">
+                  <Timer size={16} /> Todos os faltantes foram trabalhados. Giroflex desligado.
+                </p>
+              ) : (
+                <ReactivationClock minutes={idleMin} working={working} late={alarm} shared={watch.shared} />
+              )}
             </div>
           )}
 
