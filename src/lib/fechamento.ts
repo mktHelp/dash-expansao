@@ -25,6 +25,7 @@ const TEMP_INFOGRAFICO: Record<string, Temperatura> = {
   iumb9yjo5v: "frio",
   "1dwhs045ezx": "frio",
   c4cx83bekx: "frio",
+  "1y5qbp8ykto": "frio", // incluído em 26/11 à tarde
 };
 
 type AoVivoField = "nome" | "status" | "temp" | "cidade" | "uf" | "sdr" | "closer" | "reserva" | "franquia";
