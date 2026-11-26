@@ -68,3 +68,47 @@ export type FunilPayload = {
   build?: string;
   telao?: TelaoMeta | null;
 };
+
+// ---------- Fechamento pós-Black (aba "Ao Vivo") + Reativação (aba "Faltantes") ----------
+
+export type Temperatura = "vendido" | "quente" | "morno" | "frio";
+
+/** Lead da Black ainda ativo (descartados ficam fora). Sem WhatsApp. */
+export type FechamentoLead = {
+  id: string;
+  row: number;
+  nome: string; // "Margarida Pires" (primeiro e último nome)
+  cidade: string;
+  uf: string;
+  status: string; // coluna de status, já legível ("Reunião agendada")
+  temp: Temperatura;
+  closer: string;
+  sdr: string;
+  reserva: string; // o que está escrito no Termo de Reserva ("Pago", "Amanhã", "")
+  reservaPaga: boolean;
+  franquia: string;
+  franquiaPaga: boolean;
+};
+
+/** Quem faltou na Black (aba Faltantes), para reativar. Sem WhatsApp. */
+export type Faltante = {
+  id: string;
+  row: number;
+  nome: string;
+  cidade: string;
+  uf: string;
+  sdr: string;
+  mes: string; // mês da COF ("Novembro", "Sem data")
+  etapa: "franquia" | "reserva" | "reativado" | "contato" | "pendente";
+  nota: string; // texto da coluna Reativado quando não é um "sim" (ex.: "tentando")
+};
+
+export type FechamentoPayload = {
+  leads: FechamentoLead[];
+  descartados: number;
+  faltantes: Faltante[];
+  source: "sheets" | "csv" | "demo";
+  fetchedAt: number;
+  build?: string;
+  telao?: TelaoMeta | null;
+};

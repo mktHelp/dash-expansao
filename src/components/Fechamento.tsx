@@ -1,0 +1,715 @@
+"use client";
+
+import Image from "next/image";
+import { Flame, Maximize, RotateCcw, Snowflake, Thermometer, Trophy, Volume2, VolumeX } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { confettiBurst, flushPendingVictory, playVictory, preloadVictory } from "@/lib/celebrate";
+import { POLL_MS } from "@/lib/config";
+import { getAudio, readAudioState, reloadedRecently, serverAudioState, subscribeAudio, useClock } from "@/lib/live";
+import type { Faltante, FechamentoLead, FechamentoPayload, Temperatura } from "@/lib/types";
+import FitStage, { useStaged } from "./FitStage";
+import { TelaoCard } from "./Telao";
+
+// Fechamento pós-Black (aba "Ao Vivo") + Reativação (aba "Faltantes"), numa
+// tela só, no tema da Black: faixa zebrada, Anton, amarelo e preto.
+
+const TEMP = {
+  vendido: { label: "Vendidos", one: "Vendido", color: "#f8be19", Icon: Trophy },
+  quente: { label: "Quentes", one: "Quente", color: "#ff5a1f", Icon: Flame },
+  morno: { label: "Mornos", one: "Morno", color: "#f6a77a", Icon: Thermometer },
+  frio: { label: "Frios", one: "Frio", color: "#5aa9ff", Icon: Snowflake },
+} satisfies Record<Temperatura, { label: string; one: string; color: string; Icon: typeof Trophy }>;
+const ORDER: Temperatura[] = ["vendido", "quente", "morno", "frio"];
+
+const ETAPA: Record<Faltante["etapa"], { label: string; color: string; rank: number }> = {
+  franquia: { label: "Franquia paga", color: "#f8be19", rank: 0 },
+  reserva: { label: "Reserva paga", color: "#f8be19", rank: 1 },
+  reativado: { label: "Reativado", color: "#34d399", rank: 2 },
+  contato: { label: "Em contato", color: "#5aa9ff", rank: 3 },
+  pendente: { label: "A reativar", color: "#737373", rank: 4 },
+};
+const MES_RANK = ["Dezembro", "Novembro", "Outubro", "Setembro", "Agosto", "Julho", "Junho", "Maio", "Abril", "Março", "Fevereiro", "Janeiro"];
+
+const fmt = (n: number) => n.toLocaleString("pt-BR");
+const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+const initials = (nome: string) =>
+  nome
+    .split(" ")
+    .map((p) => p.charAt(0))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+const place = (l: { cidade: string; uf: string }) => [l.cidade, l.uf].filter(Boolean).join(" · ");
+
+// ---------------- dados ----------------
+
+type Alert = { kind: "vendido" | "reserva" | "franquia" | "reativado"; nome: string; quem: string };
+
+function useFechamento(onAlerts: (a: Alert[]) => void) {
+  const [data, setData] = useState<FechamentoPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const known = useRef<{ vendidos: Set<string>; etapas: Map<string, number> } | null>(null);
+  const build = useRef<string | null>(null);
+  const onAlertsRef = useRef(onAlerts);
+  useEffect(() => {
+    onAlertsRef.current = onAlerts;
+  }, [onAlerts]);
+
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function load() {
+      try {
+        const res = await fetch("/api/fechamento", { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+        if (!alive) return;
+        const payload = json as FechamentoPayload;
+        // deploy novo: recarrega sozinho (a TV não precisa de ninguém)
+        if (payload.build) {
+          if (build.current && build.current !== payload.build && !reloadedRecently()) {
+            window.location.reload();
+            return;
+          }
+          build.current = payload.build;
+        }
+        const vendidos = new Set(payload.leads.filter((l) => l.temp === "vendido").map((l) => l.id));
+        const etapas = new Map(payload.faltantes.map((f) => [f.id, ETAPA[f.etapa].rank]));
+        if (known.current) {
+          // só o que mudou desde a última leitura; desmarcar e marcar não repete
+          const alerts: Alert[] = [];
+          for (const l of payload.leads)
+            if (l.temp === "vendido" && !known.current.vendidos.has(l.id))
+              alerts.push({ kind: "vendido", nome: l.nome, quem: l.closer });
+          for (const f of payload.faltantes) {
+            const before = known.current.etapas.get(f.id) ?? 4;
+            const now = ETAPA[f.etapa].rank;
+            if (now < before && now <= 2) alerts.push({ kind: f.etapa as Alert["kind"], nome: f.nome, quem: f.sdr });
+          }
+          // vendas primeiro, reativações depois
+          const rank = { vendido: 0, franquia: 1, reserva: 2, reativado: 3 };
+          alerts.sort((a, b) => rank[a.kind] - rank[b.kind]);
+          if (alerts.length && alerts.length <= 8) onAlertsRef.current(alerts);
+          known.current.vendidos.forEach((id) => vendidos.add(id));
+          known.current.etapas.forEach((r, id) => etapas.set(id, Math.min(r, etapas.get(id) ?? r)));
+        }
+        known.current = { vendidos, etapas };
+        setData(payload);
+        setError(null);
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : "Falha ao atualizar");
+      } finally {
+        if (alive) timer = setTimeout(load, POLL_MS);
+      }
+    }
+    load();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  return { data, error };
+}
+
+function useStats(data: FechamentoPayload | null) {
+  return useMemo(() => {
+    if (!data) return null;
+    const by = Object.fromEntries(ORDER.map((t) => [t, [] as FechamentoLead[]])) as Record<Temperatura, FechamentoLead[]>;
+    for (const l of [...data.leads].sort((a, b) => a.row - b.row)) by[l.temp].push(l);
+
+    const falt = [...data.faltantes].sort(
+      (a, b) =>
+        ETAPA[a.etapa].rank - ETAPA[b.etapa].rank ||
+        (MES_RANK.indexOf(a.mes) + 99) % 99 - ((MES_RANK.indexOf(b.mes) + 99) % 99) ||
+        a.nome.localeCompare(b.nome),
+    );
+    const count = (k: Faltante["etapa"][]) => data.faltantes.filter((f) => k.includes(f.etapa)).length;
+    const reativados = count(["reativado", "reserva", "franquia"]);
+    const reservas = count(["reserva", "franquia"]);
+    const franquias = count(["franquia"]);
+    const contato = count(["contato"]);
+
+    const sdrMap = new Map<string, { name: string; total: number; reativados: number; vendas: number }>();
+    for (const f of data.faltantes) {
+      const name = f.sdr || "Sem SDR";
+      const s = sdrMap.get(name) ?? { name, total: 0, reativados: 0, vendas: 0 };
+      s.total++;
+      if (ETAPA[f.etapa].rank <= 2) s.reativados++;
+      if (ETAPA[f.etapa].rank <= 1) s.vendas++;
+      sdrMap.set(name, s);
+    }
+    const sdrs = [...sdrMap.values()].sort((a, b) => b.reativados - a.reativados || b.total - a.total || a.name.localeCompare(b.name));
+    return { by, ativos: data.leads.length, falt, reativados, reservas, franquias, contato, sdrs };
+  }, [data]);
+}
+
+// ---------------- peças ----------------
+
+/** Lista que, quando não cabe, circula sozinha de baixo para cima. */
+function AutoScroll({ items, render, staged, secsPerItem = 2.6 }: { items: unknown[]; render: (copy: boolean) => ReactNode; staged: boolean; secsPerItem?: number }) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const has = items.length > 0;
+  useEffect(() => {
+    const v = viewport.current;
+    const l = inner.current;
+    if (!staged || !v || !l) {
+      setOverflow(false);
+      return;
+    }
+    const check = () => setOverflow(l.scrollHeight > v.clientHeight + 4);
+    const ro = new ResizeObserver(check);
+    ro.observe(v);
+    ro.observe(l);
+    check();
+    return () => ro.disconnect();
+  }, [has, staged]);
+  return (
+    <div
+      ref={viewport}
+      className={
+        staged
+          ? "relative min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_10px,black_calc(100%-36px),transparent)]"
+          : ""
+      }
+    >
+      <div className={overflow ? "animate-marquee-y" : ""} style={overflow ? { animationDuration: `${Math.max(20, items.length * secsPerItem)}s` } : undefined}>
+        <div ref={inner}>{render(false)}</div>
+        {overflow && <div aria-hidden>{render(true)}</div>}
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ t, n, children }: { t: Temperatura; n: number; children?: ReactNode }) {
+  const { label, color, Icon } = TEMP[t];
+  return (
+    <div className="flex items-center gap-3">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: color, color: "#0a0a0a" }}>
+        <Icon size={19} strokeWidth={2.4} />
+      </span>
+      <h2 className="font-display text-[34px] uppercase leading-none" style={{ color }}>
+        {label}
+      </h2>
+      <span className="h-px flex-1 border-t-2 border-dashed border-white/[0.13]" />
+      {children}
+      <span className="grid h-9 min-w-9 place-items-center rounded-lg border-2 px-2 font-display text-xl leading-none" style={{ borderColor: color, color }}>
+        {n}
+      </span>
+    </div>
+  );
+}
+
+function Chip({ color, solid, children }: { color: string; solid?: boolean; children: ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[13px] font-semibold leading-5 whitespace-nowrap"
+      style={solid ? { background: color, color: "#0a0a0a" } : { background: `${color}22`, color }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** "Pago" -> "Reserva paga"; "Amanhã" -> "Reserva: amanhã". */
+function payNote(l: FechamentoLead): string[] {
+  const out: string[] = [];
+  if (l.franquiaPaga) out.push("Franquia paga");
+  else if (l.franquia) out.push(`Franquia: ${l.franquia.toLowerCase()}`);
+  if (l.reservaPaga) out.push("Reserva paga");
+  else if (l.reserva) out.push(`Reserva: ${l.reserva.toLowerCase()}`);
+  return out;
+}
+
+function SoldCard({ l, fresh }: { l: FechamentoLead; fresh: boolean }) {
+  return (
+    <li
+      className={`relative flex min-h-[112px] items-center gap-4 overflow-hidden rounded-2xl bg-bf py-4 pl-9 pr-5 text-ink shadow-[6px_6px_0_#ff5a1f] ${fresh ? "animate-flash" : ""}`}
+    >
+      <span aria-hidden className="hazard absolute inset-y-0 left-0 w-3.5 [animation:none]" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] font-extrabold uppercase tracking-[0.2em] text-ink/70">Franquia vendida</p>
+        <p className="mt-0.5 text-[22px] font-black leading-tight sm:text-[26px]">{l.nome}</p>
+        <p className="mt-0.5 truncate text-[15px] font-semibold text-ink/80">
+          {[place(l), l.closer && `closer ${l.closer}`].filter(Boolean).join("  ·  ")}
+        </p>
+        {payNote(l).length > 0 && (
+          <p className="mt-1.5 flex flex-wrap gap-1.5">
+            {payNote(l).map((n) => (
+              <span key={n} className="rounded-full bg-ink/90 px-2.5 py-0.5 text-[12px] font-bold text-bf">
+                {n}
+              </span>
+            ))}
+          </p>
+        )}
+      </div>
+      <span className="grid size-[86px] shrink-0 -rotate-12 place-items-center rounded-full border-[3px] border-ink font-display text-[19px] uppercase leading-none">
+        <span className="grid size-[74px] place-items-center rounded-full border border-dashed border-ink/70">Vendido</span>
+      </span>
+    </li>
+  );
+}
+
+function HotCard({ l }: { l: FechamentoLead }) {
+  const c = TEMP.quente.color;
+  return (
+    <li className="flex min-w-0 flex-col justify-between gap-2 rounded-2xl border-2 bg-[#160c08] px-5 py-4 shadow-[0_0_28px_rgb(255_90_31/0.22)]" style={{ borderColor: c }}>
+      <div className="min-w-0">
+        <p className="truncate text-[24px] font-black leading-tight text-white">{l.nome}</p>
+        <p className="truncate text-[15px] text-neutral-400">{[place(l), l.closer && `closer ${l.closer}`].filter(Boolean).join("  ·  ")}</p>
+      </div>
+      <p className="flex flex-wrap gap-1.5">
+        {l.status && (
+          <Chip color={c} solid>
+            {l.status}
+          </Chip>
+        )}
+        {payNote(l).map((n) => (
+          <Chip key={n} color="#f8be19">
+            {n}
+          </Chip>
+        ))}
+      </p>
+    </li>
+  );
+}
+
+function LeadRow({ l }: { l: FechamentoLead }) {
+  const c = TEMP[l.temp].color;
+  return (
+    <li className="mb-2 flex items-center gap-3 rounded-xl border border-white/[0.07] bg-[#131313] px-3.5 py-2.5">
+      <span className="grid size-11 shrink-0 place-items-center rounded-full border-2 font-display text-[17px]" style={{ borderColor: c, color: c }}>
+        {initials(l.nome)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[19px] font-extrabold leading-tight text-white">{l.nome}</p>
+        <p className="mt-0.5 flex min-w-0 items-center gap-2 text-[14px] text-neutral-400">
+          <span className="truncate">{place(l)}</span>
+          {l.status && <Chip color={c}>{l.status}</Chip>}
+        </p>
+      </div>
+      {l.closer && <span className="shrink-0 text-[13px] text-neutral-500">{l.closer}</span>}
+    </li>
+  );
+}
+
+function Tile({ t, n, total }: { t: Temperatura; n: number; total: number }) {
+  const { one, label, color, Icon } = TEMP[t];
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-white/[0.08] bg-[#121212] px-5 py-3">
+      <div>
+        <p className="font-display text-[54px] leading-none" style={{ color }}>
+          {n}
+        </p>
+        <p className="mt-1 text-[13px] font-bold uppercase tracking-[0.18em] text-neutral-300">{n === 1 ? one : label}</p>
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <span className="grid size-10 place-items-center rounded-full" style={{ background: color, color: "#0a0a0a" }}>
+          <Icon size={20} strokeWidth={2.4} />
+        </span>
+        <span className="text-[13px] text-neutral-500">{pct(n, total)}%</span>
+      </div>
+    </div>
+  );
+}
+
+function FaltRow({ f }: { f: Faltante }) {
+  const e = ETAPA[f.etapa];
+  const done = e.rank <= 2;
+  return (
+    <li className={`flex items-center gap-3 border-b border-white/[0.06] px-1 py-2.5 ${done ? "" : ""}`}>
+      <span
+        className="grid size-9 shrink-0 place-items-center rounded-full font-display text-[14px]"
+        style={done ? { background: e.color, color: "#0a0a0a" } : { border: "2px solid #3a3a3a", color: "#8a8a8a" }}
+      >
+        {initials(f.nome)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-[17px] font-bold leading-tight ${done ? "text-white" : "text-neutral-200"}`}>{f.nome}</p>
+        <p className="truncate text-[13px] text-neutral-500">
+          {[place(f), f.mes && `COF ${f.mes.toLowerCase()}`].filter(Boolean).join("  ·  ")}
+        </p>
+      </div>
+      <span className="hidden shrink-0 text-[13px] text-neutral-500 sm:inline">{f.sdr}</span>
+      <span className="w-[118px] shrink-0 text-right">
+        <Chip color={e.color} solid={done}>
+          {f.etapa === "contato" && f.nota ? f.nota : e.label}
+        </Chip>
+      </span>
+    </li>
+  );
+}
+
+function Step({ n, label, of, color, first }: { n: number; label: string; of?: number; color: string; first?: boolean }) {
+  return (
+    <div
+      className={`relative flex min-w-0 flex-1 flex-col justify-center py-3 ${first ? "pl-4" : "pl-8"} pr-6`}
+      style={{
+        background: `${color}1f`,
+        clipPath: first ? "polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%)" : "polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%, 18px 50%)",
+      }}
+    >
+      <p className="font-display text-[40px] leading-none" style={{ color }}>
+        {n}
+      </p>
+      <p className="mt-1 text-[12px] font-bold uppercase tracking-[0.14em] text-neutral-300">{label}</p>
+      {of !== undefined && <p className="text-[12px] text-neutral-500">{pct(n, of)}% das faltantes</p>}
+    </div>
+  );
+}
+
+function Announcement({ alert, onDone }: { alert: Alert; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, alert.kind === "reativado" ? 5500 : 8000);
+    return () => clearTimeout(t);
+  }, [alert, onDone]);
+  const title = {
+    vendido: "Franquia vendida!",
+    franquia: "Reativou e pagou a franquia!",
+    reserva: "Reativou e garantiu a reserva!",
+    reativado: "Faltante reativado!",
+  }[alert.kind];
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-black/55">
+      <div style={{ "--announce-ms": alert.kind === "reativado" ? "5500ms" : "8000ms" } as React.CSSProperties} className="announce relative w-[min(860px,92vw)] -rotate-2 overflow-hidden rounded-3xl bg-bf px-12 py-10 text-center text-ink shadow-[10px_10px_0_#ff5a1f]">
+        <span aria-hidden className="hazard absolute inset-x-0 top-0 h-3.5" />
+        <p className="font-display text-[64px] uppercase leading-none">{title}</p>
+        <p className="mt-4 text-[40px] font-black leading-tight">{alert.nome}</p>
+        {alert.quem && <p className="mt-1 text-xl font-semibold text-ink/70">{alert.kind === "vendido" ? `fechada por ${alert.quem}` : `SDR ${alert.quem}`}</p>}
+        <span aria-hidden className="hazard absolute inset-x-0 bottom-0 h-3.5" />
+      </div>
+    </div>
+  );
+}
+
+function LiveNote({ now, fetchedAt, error }: { now: number; fetchedAt: number | null; error: string | null }) {
+  const secs = now && fetchedAt ? Math.max(0, Math.round((now - fetchedAt) / 1000)) : null;
+  if (error)
+    return (
+      <span className="flex items-center gap-1.5 text-sm text-red-400" title={error}>
+        <span className="size-2 rounded-full bg-red-500" /> Reconectando à planilha
+      </span>
+    );
+  return (
+    <span className="flex items-center gap-1.5 text-sm text-neutral-400">
+      <span className="size-2 animate-pulse rounded-full bg-red-500" /> Ao vivo
+      {secs !== null && <span className="text-neutral-500">· atualizado há {secs < 60 ? `${secs} s` : `${Math.round(secs / 60)} min`}</span>}
+    </span>
+  );
+}
+
+const RIBBON = ["Black Friday", "Fechamento", "Reativação", "Bora fechar"];
+
+// ---------------- tela ----------------
+
+export default function Fechamento() {
+  const now = useClock();
+  const { staged, w, h } = useStaged();
+
+  const [sound, setSound] = useState(true);
+  const soundRef = useRef(sound);
+  useEffect(() => {
+    soundRef.current = sound;
+  }, [sound]);
+  useEffect(() => {
+    const unlock = () => {
+      const ctx = getAudio();
+      preloadVictory(ctx);
+      void ctx?.resume().then(() => flushPendingVictory(ctx)).catch(() => {});
+    };
+    unlock();
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+  const audioState = useSyncExternalStore(subscribeAudio, readAudioState, serverAudioState);
+  const soundBlocked = sound && audioState !== "running";
+
+  const [queue, setQueue] = useState<Alert[]>([]);
+  const onAlerts = useCallback((alerts: Alert[]) => {
+    setQueue((q) => [...q, ...alerts].slice(-6));
+    const venda = alerts.some((a) => a.kind !== "reativado");
+    if (venda) confettiBurst(5000);
+    // reativado: só o anúncio; venda: confete e som de vitória
+    if (venda && soundRef.current) playVictory(getAudio());
+  }, []);
+  const dismiss = useCallback(() => setQueue((q) => q.slice(1)), []);
+  const { data, error } = useFechamento(onAlerts);
+  const stats = useStats(data);
+  const current = queue[0];
+
+  // modo de teste: ?simular=1 e teclas V (venda), R (reativado)
+  useEffect(() => {
+    if (!/[?&]simular(=|&|$)/.test(window.location.search)) return;
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (k === "v") onAlerts([{ kind: "vendido", nome: "Maria Souza", quem: "Fernando" }]);
+      if (k === "r") onAlerts([{ kind: "reativado", nome: "João Lima", quem: "Valmor" }]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onAlerts]);
+
+  // mouse parado por 3s: esconde cursor e botões
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    let t = setTimeout(() => setIdle(true), 3000);
+    const wake = () => {
+      setIdle(false);
+      clearTimeout(t);
+      t = setTimeout(() => setIdle(true), 3000);
+    };
+    window.addEventListener("mousemove", wake);
+    window.addEventListener("keydown", wake);
+    window.addEventListener("touchstart", wake);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("mousemove", wake);
+      window.removeEventListener("keydown", wake);
+      window.removeEventListener("touchstart", wake);
+    };
+  }, []);
+  useEffect(() => {
+    document.documentElement.classList.toggle("idle", idle);
+  }, [idle]);
+
+  const updated = data ? new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(data.fetchedAt) : "";
+  const freshId = current?.kind === "vendido" ? current.nome : null;
+
+  const content = (
+    <main className={`relative isolate ${staged ? "flex h-[1080px] w-[1920px] flex-col overflow-hidden" : "flex w-full flex-col pb-10"}`}>
+      {soundBlocked && (
+        <button
+          onClick={() => getAudio()}
+          className="fixed bottom-6 right-4 z-40 flex items-center gap-1.5 rounded-full border border-bf/40 bg-black/85 px-3 py-1 text-xs text-neutral-300"
+        >
+          <VolumeX size={13} /> Som bloqueado pelo navegador. Clique na tela para ativar.
+        </button>
+      )}
+      {data?.telao && <TelaoCard meta={data.telao} />}
+      {current && <Announcement key={`${current.kind}-${current.nome}`} alert={current} onDone={dismiss} />}
+
+      {/* faixa inclinada que corre, como no infográfico */}
+      <div className={`relative z-10 shrink-0 overflow-hidden ${staged ? "h-[62px]" : "h-12"}`}>
+        <div className="absolute -left-10 -right-10 top-2 -rotate-[1.2deg] bg-bf py-1.5 shadow-[0_6px_0_#ff5a1f]">
+          <div className="ribbon-scroll flex w-max gap-10 whitespace-nowrap font-display text-[26px] uppercase leading-none text-ink">
+            {Array.from({ length: 16 }, (_, i) => (
+              <span key={i} className="flex items-center gap-10">
+                {RIBBON[i % RIBBON.length]} <span className="text-[18px]">★</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={staged ? "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_700px] gap-10 px-12 pt-4" : "flex flex-col gap-12 px-5 pt-6"}>
+        {/* ================= fechamento ================= */}
+        <section className="flex min-h-0 flex-col">
+          <header className={staged ? "flex items-end justify-between gap-6" : "flex flex-col items-start gap-4"}>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Image src="/logo-helpmultas.webp" alt="HelpMultas" width={2000} height={592} priority className="h-7 w-auto" />
+                <span className="text-[13px] font-extrabold uppercase tracking-[0.24em] text-bf">Expansão · pós-Black</span>
+              </div>
+              <h1 className={`mt-2 font-display uppercase leading-[0.92] text-white ${staged ? "text-[88px]" : "text-[52px]"}`}>
+                Fechamento <span className="inline-block -rotate-1 bg-bf px-3 text-ink shadow-[5px_5px_0_#ff5a1f]">da Black</span>
+              </h1>
+            </div>
+            <div className={`flex shrink-0 flex-col gap-2 pb-1 ${staged ? "items-end" : "items-start"}`}>
+              <LiveNote now={now} fetchedAt={data?.fetchedAt ?? null} error={error} />
+              {updated && <span className="text-sm text-neutral-500">Planilha lida em {updated}</span>}
+              <div className="idle-hide flex gap-1">
+                <button onClick={() => setSound((s) => !s)} title={sound ? "Desativar som" : "Ativar som"} className="rounded-full p-2 text-neutral-400 hover:text-bf">
+                  {sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                </button>
+                <button
+                  onClick={() => document.documentElement.requestFullscreen?.().catch(() => {})}
+                  title="Tela cheia (TV)"
+                  className="rounded-full p-2 text-neutral-400 hover:text-bf"
+                >
+                  <Maximize size={18} />
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {!stats ? (
+            <div className="grid flex-1 place-items-center py-24 text-center">
+              {error ? (
+                <div>
+                  <p className="font-display text-5xl uppercase text-bf">A planilha não respondeu</p>
+                  <p className="mt-3 text-neutral-400">{error}</p>
+                </div>
+              ) : (
+                <p className="animate-pulse font-display text-5xl uppercase text-bf">Carregando o fechamento…</p>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className={`mt-5 grid gap-3 ${staged ? "grid-cols-[repeat(4,minmax(0,1fr))_150px]" : "grid-cols-2"}`}>
+                {ORDER.map((t) => (
+                  <Tile key={t} t={t} n={stats.by[t].length} total={stats.ativos} />
+                ))}
+                <div className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/15 text-center ${staged ? "" : "col-span-2 py-3"}`}>
+                  <p className="font-display text-[54px] leading-none text-white">{stats.ativos}</p>
+                  <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-neutral-400">leads ativos</p>
+                  {data!.descartados > 0 && <p className="text-[12px] text-neutral-600">+{data!.descartados} descartados</p>}
+                </div>
+              </div>
+
+              {/* termômetro: do fechado ao frio */}
+              <div className="mt-3 flex h-3 gap-1 overflow-hidden rounded-full">
+                {ORDER.map((t) =>
+                  stats.by[t].length ? <span key={t} className="h-full rounded-full" style={{ flexGrow: stats.by[t].length, background: TEMP[t].color }} /> : null,
+                )}
+              </div>
+
+              <div className={`mt-5 flex min-h-0 flex-1 flex-col ${staged ? "gap-4" : "gap-8"}`}>
+                <div className="flex flex-col gap-3">
+                  <SectionTitle t="vendido" n={stats.by.vendido.length} />
+                  {stats.by.vendido.length ? (
+                    <ul className={`grid gap-4 pr-2 ${staged ? "grid-cols-[repeat(auto-fill,minmax(400px,1fr))]" : "grid-cols-1"}`}>
+                      {stats.by.vendido.map((l) => (
+                        <SoldCard key={l.id} l={l} fresh={freshId === l.nome} />
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-lg text-neutral-500">A primeira franquia do fechamento aparece aqui.</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <SectionTitle t="quente" n={stats.by.quente.length} />
+                  {stats.by.quente.length ? (
+                    <ul className={`grid gap-3 ${staged ? "grid-cols-[repeat(auto-fill,minmax(300px,1fr))]" : "grid-cols-1"}`}>
+                      {stats.by.quente.map((l) => (
+                        <HotCard key={l.id} l={l} />
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-lg text-neutral-500">Nenhum lead quente agora.</p>
+                  )}
+                </div>
+
+                <div className={`grid min-h-0 flex-1 gap-6 ${staged ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {(["morno", "frio"] as const).map((t) => (
+                    <div key={t} className="flex min-h-0 flex-col gap-3">
+                      <SectionTitle t={t} n={stats.by[t].length} />
+                      {stats.by[t].length ? (
+                        <AutoScroll
+                          items={stats.by[t]}
+                          staged={staged}
+                          render={(copy) => (
+                            <ul>
+                              {stats.by[t].map((l) => (
+                                <LeadRow key={copy ? `c-${l.id}` : l.id} l={l} />
+                              ))}
+                            </ul>
+                          )}
+                        />
+                      ) : (
+                        <p className="text-lg text-neutral-500">Ninguém aqui.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* ================= reativação ================= */}
+        <section className={`flex min-h-0 flex-col ${staged ? "rounded-t-3xl border border-b-0 border-white/[0.09] bg-[#0f0f0f] px-7 pt-6" : ""}`}>
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-full bg-[#34d399] text-ink">
+              <RotateCcw size={20} strokeWidth={2.6} />
+            </span>
+            <h2 className={`font-display uppercase leading-none text-white ${staged ? "text-[52px]" : "text-5xl"}`}>Reativação</h2>
+          </div>
+          <p className="mt-2 text-[15px] text-neutral-400">Quem tinha COF e faltou na Black. Cada um que voltar conta aqui.</p>
+
+          {stats && (
+            <>
+              <div className="mt-5 flex items-end gap-4">
+                <p className="font-display text-[120px] leading-[0.85] text-[#34d399]">{stats.reativados}</p>
+                <div className="pb-2">
+                  <p className="font-display text-[40px] leading-none text-neutral-500">/ {stats.falt.length}</p>
+                  <p className="text-[13px] font-bold uppercase tracking-[0.18em] text-neutral-300">reativados</p>
+                </div>
+                <div className="mb-3 ml-auto text-right text-[14px] text-neutral-400">
+                  {stats.contato > 0 && (
+                    <p>
+                      <b className="text-[#5aa9ff]">{stats.contato}</b> em contato
+                    </p>
+                  )}
+                  <p>
+                    <b className="text-white">{stats.falt.length - stats.reativados - stats.contato}</b> a reativar
+                  </p>
+                </div>
+              </div>
+
+              <div className={`mt-4 gap-1 ${staged ? "flex" : "grid grid-cols-2"}`}>
+                <Step first n={stats.falt.length} label="Faltantes" color="#a3a3a3" />
+                <Step n={stats.reativados} label="Reativados" of={stats.falt.length} color="#34d399" />
+                <Step n={stats.reservas} label="Reservas" color="#f8be19" />
+                <Step n={stats.franquias} label="Franquias" color="#f8be19" />
+              </div>
+
+              <ul className="mt-5 grid grid-cols-2 gap-3">
+                {stats.sdrs.map((s) => (
+                  <li key={s.name} className="rounded-2xl border border-white/[0.08] bg-[#151515] px-4 py-3">
+                    <p className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-[18px] font-extrabold text-white">{s.name}</span>
+                      <span className="text-[14px] text-neutral-400">
+                        <b className="font-display text-[26px] font-normal text-[#34d399]">{s.reativados}</b> / {s.total}
+                      </span>
+                    </p>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                      <div className="h-full rounded-full bg-[#34d399]" style={{ width: `${pct(s.reativados, s.total)}%` }} />
+                    </div>
+                    <p className="mt-1.5 text-[12px] text-neutral-500">
+                      {s.vendas ? `${s.vendas} ${s.vendas === 1 ? "venda" : "vendas"} · ` : ""}
+                      {s.total - s.reativados} a reativar
+                    </p>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-5 flex items-baseline justify-between border-b border-white/[0.12] pb-2 text-[12px] font-bold uppercase tracking-[0.16em] text-neutral-500">
+                <span>Faltantes</span>
+                <span>situação</span>
+              </div>
+              <AutoScroll
+                items={stats.falt}
+                staged={staged}
+                secsPerItem={2.4}
+                render={(copy) => (
+                  <ul>
+                    {stats.falt.map((f) => (
+                      <FaltRow key={copy ? `c-${f.id}` : f.id} f={f} />
+                    ))}
+                  </ul>
+                )}
+              />
+            </>
+          )}
+        </section>
+      </div>
+
+      <div aria-hidden className={`hazard shrink-0 ${staged ? "h-4" : "mt-10 h-3"}`} />
+    </main>
+  );
+
+  return staged ? (
+    <FitStage w={w} h={h}>
+      {content}
+    </FitStage>
+  ) : (
+    content
+  );
+}

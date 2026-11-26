@@ -364,3 +364,10 @@ html.champion .panel {
   .gold-text, .gold-bar, .sunburst, .checkered, .animate-float { animation: none; }
   html.champion body { animation: none; }
 }
+
+/* ---------- fechamento pós-Black: faixa inclinada que corre ---------- */
+@keyframes ribbon-scroll { to { transform: translateX(-50%); } }
+.ribbon-scroll { animation: ribbon-scroll 48s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ribbon-scroll { animation: none; }
+}

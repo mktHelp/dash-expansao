@@ -1,27 +1,14 @@
 import type { Metadata } from "next";
-import { Fraunces } from "next/font/google";
-import FunilDashboard from "@/components/Funil";
-
-// Fraunces "molenga" (SOFT + WONK): serifa de festa, alegre sem ser infantil
-const party = Fraunces({
-  variable: "--font-party",
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-  axes: ["SOFT", "WONK", "opsz"],
-});
+import Fechamento from "@/components/Fechamento";
 
 export const metadata: Metadata = {
-  title: "Funil ao vivo · Black Friday Expansão",
+  title: "Fechamento e reativação · Black Friday Expansão",
 };
 
-// Página principal = Funil ao vivo (a TV fica presa neste link).
-// Lê a aba "Ao Vivo" da planilha: cada lead da Black, quem trouxe (SDR), quem
-// está fechando (Closer) e as vendas (reserva ou taxa de franquia).
-// O painel de presenças confirmadas mudou para /presencas.
+// Página principal = tela da TV (a TV não troca de link).
+// Depois da Black: fechamento dos leads (aba "Ao Vivo") e reativação de quem
+// faltou (aba "Faltantes"), numa tela só. O funil da noite fica em /funil e as
+// presenças em /presencas.
 export default function Page() {
-  return (
-    <div className={party.variable}>
-      <FunilDashboard />
-    </div>
-  );
+  return <Fechamento />;
 }

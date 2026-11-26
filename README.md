@@ -14,11 +14,15 @@ Painel em **Next.js 16 + Tailwind 4** que lê a planilha **Relatório COF** (aba
 Atualiza a cada 15 s. **E-mail, WhatsApp e capital nunca saem do servidor**; o candidato aparece como "Maria S.".
 
 ### Duas telas
-- **`/` — funil ao vivo:** é a tela da TV (a TV não troca de link). A mesma tela também abre em `/funil`.
+- **`/` — fechamento e reativação (pós-Black):** é a tela da TV (a TV não troca de link); também abre em `/fechamento`. À esquerda, os leads da aba *Ao Vivo* separados em vendidos, quentes, mornos e frios (descartados ficam fora). À direita, a reativação de quem faltou (aba *Faltantes*): reativados, reservas, franquias, placar por SDR e a lista rolando.
+  - **Temperatura:** a do infográfico de fechamento (26/11) já vem no código. Lead com status "Vendido", ou termo/taxa marcado como pago, vira vendido. Se a aba ganhar uma coluna **Temperatura** (Quente, Morno, Frio), ela passa a valer. Lead novo sem temperatura ganha um palpite pelo status.
+  - **Faltantes:** a coluna *Reativado* com "Sim" ou uma data conta como reativado; outro texto (ex.: "tentando") aparece como *em contato*. *Termo de Reserva* e *Taxa de Franquia* contam quando dizem "Pago", "Sim", uma data ou um valor ("Amanhã" ainda não conta).
+  - **Comemoração:** venda nova (aqui ou na reativação) tem anúncio, confete e som; reativado tem só o anúncio. `/?simular=1` + teclas **V** e **R** testa.
+- **`/funil` — funil ao vivo da noite da Black (25/11).**
 - **`/presencas` — presenças confirmadas:** meta de presenças, na mesa, funil, ranking de presenças e fila de follow-up (ficava em `/` até a Black).
 - **`/completo` — visão completa:** convites, qualificados, meta de presenças, ranking por leads, etapas no CRM, leads por mês e top estados.
 
-### Funil ao vivo (`/` e `/funil`)
+### Funil ao vivo (`/funil`)
 Lê a aba **"Ao Vivo"** da mesma planilha, onde os vendedores lançam cada lead da Black. Colunas: Candidato, Whatsapp, Cidade, UF, Responsável (SDR), Responsável (Closer), Modelo, Termo de Reserva, Taxa de Franquia (a ordem não importa).
 - **Venda** = lead com **Termo de Reserva** *ou* **Taxa de Franquia** preenchido ("Sim", valor ou data; vazio, "Não", "-" e "0" não contam). Conta uma vez por lead, mesmo com os dois. **Meta: 10** (`META_VENDAS`).
 - **A grande noite, em clima de festa:** um letreiro de teatro com luzes de pista (feixes rosa e turquesa varrendo o fundo). No centro, um **arco de 10 lâmpadas** em volta do número de vendas: as apagadas fazem o pisca-pisca correndo e cada venda acende uma (na ordem da planilha), **turquesa para reserva e ouro para franquia**, com um clarão; o número entra quicando. Nas laterais, reservas (turquesa) e franquias (ouro). Tipografia Fraunces "molenga" (só nesta tela).
@@ -136,6 +140,7 @@ Na TV: abra o link e clique no botão de tela cheia (canto superior direito). O 
 | `src/lib/watch.ts` | relógio de inatividade (minutos de expediente) e recorde local de reserva |
 | `src/lib/record.ts` | recorde compartilhado no Redis (atualização atômica) |
 | `src/lib/telao.ts`, `src/app/telao`, `src/components/Telao*.tsx` | telão: imagem no centro de todas as telas |
-| `src/lib/funil.ts`, `src/app/page.tsx`, `src/app/funil`, `src/components/Funil.tsx` | funil ao vivo (aba "Ao Vivo") |
+| `src/lib/funil.ts`, `src/app/funil`, `src/components/Funil.tsx` | funil ao vivo da noite da Black (aba "Ao Vivo") |
+| `src/lib/fechamento.ts`, `src/app/page.tsx`, `src/app/api/fechamento`, `src/components/Fechamento.tsx` | fechamento pós-Black e reativação (abas "Ao Vivo" e "Faltantes") |
 | `src/lib/live.ts` | relógio, som e trava de recarga usados pelas duas telas |
 | `src/components/` | interface |
