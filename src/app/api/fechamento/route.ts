@@ -1,6 +1,10 @@
 import { connection } from "next/server";
 import { getFechamentoPayload } from "@/lib/fechamento";
 import { updateCounter } from "@/lib/record";
+
+// O relógio da reativação começou a contar às 10h de 26/11 (pedido do time).
+// Só vale na primeira leitura; depois quem manda é o recorde no Redis.
+const REATIVACAO_INICIO = new Date(process.env.REATIVACAO_INICIO ?? "2026-11-26T10:00:00-03:00").getTime();
 import { getTelaoMeta, telaoAvailable } from "@/lib/telao";
 import type { FechamentoPayload } from "@/lib/types";
 
@@ -18,7 +22,7 @@ export async function GET() {
     if (telaoAvailable()) {
       const reativados = payload.faltantes.filter((f) => f.etapa === "reativado" || f.etapa === "reserva" || f.etapa === "franquia").length;
       try {
-        const r = await updateCounter("reativacao", reativados);
+        const r = await updateCounter("reativacao", reativados, REATIVACAO_INICIO);
         if (r) {
           reativacao = { max: r.max, at: r.at };
           telao = r.telao;

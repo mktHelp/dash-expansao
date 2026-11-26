@@ -62,9 +62,15 @@ const SCRIPT_ONE = `
 local now = tonumber(ARGV[1])
 local f = ARGV[2]
 local count = tonumber(ARGV[3])
+local start = tonumber(ARGV[4])
 local max = tonumber(redis.call("HGET", KEYS[1], f .. ":max"))
 local at = tonumber(redis.call("HGET", KEYS[1], f .. ":at"))
-if (not max) or (not at) or count > max then
+if (not max) or (not at) then
+  -- primeira leitura: o relógio começa no horário combinado (ou agora)
+  max = count
+  at = start or now
+  redis.call("HSET", KEYS[1], f .. ":max", tostring(max), f .. ":at", tostring(at))
+elseif count > max then
   max = count
   at = now
   redis.call("HSET", KEYS[1], f .. ":max", tostring(max), f .. ":at", tostring(at))
@@ -79,10 +85,13 @@ return {tostring(max), tostring(at), redis.call("GET", KEYS[2]) or ""}
 export async function updateCounter(
   field: string,
   count: number,
+  start?: number, // de quando o relógio conta na primeira vez (epoch ms)
   now = Date.now(),
 ): Promise<{ max: number; at: number; telao: TelaoMeta | null } | null> {
   if (!sharedRecordConfigured) return null;
-  const result = await redis(["EVAL", SCRIPT_ONE, "2", KEY, TELAO_META_KEY, String(now), field, String(count)]);
+  const args = [String(now), field, String(count)];
+  if (start && start <= now) args.push(String(start));
+  const result = await redis(["EVAL", SCRIPT_ONE, "2", KEY, TELAO_META_KEY, ...args]);
   if (!Array.isArray(result) || result.length < 3) throw new Error("Resposta inesperada do Redis");
   return { max: Number(result[0]), at: Number(result[1]), telao: parseTelaoMeta(result[2]) };
 }
