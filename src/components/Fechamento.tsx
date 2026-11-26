@@ -183,6 +183,40 @@ function AutoScroll({ items, render, staged, secsPerItem = 2.6 }: { items: unkno
   );
 }
 
+/** Uma linha só, de altura fixa: quando os cards não cabem, a faixa circula
+ *  de lado (como a faixa do topo) em vez de empurrar o resto da tela. */
+function Belt({ count, minW, staged, render }: { count: number; minW: number; staged: boolean; render: (copy: boolean) => ReactNode }) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const v = viewport.current;
+    if (!v) return;
+    const ro = new ResizeObserver(() => setWidth(v.clientWidth));
+    ro.observe(v);
+    setWidth(v.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  const GAP = 16;
+  const overflow = staged && width > 0 && count * (minW + GAP) - GAP > width;
+  if (!staged) return <ul className="grid grid-cols-1 gap-4">{render(false)}</ul>;
+  return (
+    <div ref={viewport} className={overflow ? "overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]" : ""}>
+      {overflow ? (
+        <div className="animate-marquee-x flex w-max" style={{ animationDuration: `${count * 6}s`, ["--belt-w" as string]: `${minW + GAP}px` }}>
+          <ul className="belt flex">{render(false)}</ul>
+          <ul aria-hidden className="belt flex">
+            {render(true)}
+          </ul>
+        </div>
+      ) : (
+        <ul className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(count, 1)}, minmax(0, 1fr))` }}>
+          {render(false)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function SectionTitle({ t, n, children }: { t: Temperatura; n: number; children?: ReactNode }) {
   const { label, color, Icon } = TEMP[t];
   return (
@@ -223,44 +257,47 @@ function payNote(l: FechamentoLead): string[] {
   return out;
 }
 
-function SoldCard({ l, fresh }: { l: FechamentoLead; fresh: boolean }) {
+function SoldCard({ l, fresh, compact, staged }: { l: FechamentoLead; fresh: boolean; compact: boolean; staged: boolean }) {
   return (
     <li
-      className={`relative flex min-h-[112px] items-center gap-4 overflow-hidden rounded-2xl bg-bf py-4 pl-9 pr-5 text-ink shadow-[6px_6px_0_#ff5a1f] ${fresh ? "animate-flash" : ""}`}
+      className={`relative flex items-center gap-4 overflow-hidden rounded-2xl bg-bf py-3.5 text-ink shadow-[5px_5px_0_#ff5a1f] ${
+        staged ? "h-[118px]" : "min-h-[112px]"
+      } ${compact ? "pl-7 pr-4" : "pl-9 pr-5"} ${fresh ? "animate-flash" : ""}`}
     >
       <span aria-hidden className="hazard absolute inset-y-0 left-0 w-3.5 [animation:none]" />
       <div className="min-w-0 flex-1">
-        <p className="text-[12px] font-extrabold uppercase tracking-[0.2em] text-ink/70">Franquia vendida</p>
-        <p className="mt-0.5 text-[22px] font-black leading-tight sm:text-[26px]">{l.nome}</p>
-        <p className="mt-0.5 truncate text-[15px] font-semibold text-ink/80">
-          {[place(l), l.closer && `closer ${l.closer}`].filter(Boolean).join("  ·  ")}
+        <p className="truncate text-[12px] font-extrabold uppercase tracking-[0.18em] text-ink/70">{l.closer ? `Vendida por ${l.closer}` : "Franquia vendida"}</p>
+        <p className={`mt-0.5 font-black leading-tight ${staged ? "truncate" : ""} ${compact ? "text-[21px]" : "text-[22px] sm:text-[25px]"}`}>{l.nome}</p>
+        <p className="mt-0.5 truncate text-[15px] font-semibold text-ink/80">{place(l)}</p>
+        <p className={`mt-1.5 flex gap-1.5 ${staged ? "overflow-hidden" : "flex-wrap"}`}>
+          {payNote(l).map((n) => (
+            <span key={n} className="whitespace-nowrap rounded-full bg-ink/90 px-2.5 py-0.5 text-[12px] font-bold text-bf">
+              {n}
+            </span>
+          ))}
         </p>
-        {payNote(l).length > 0 && (
-          <p className="mt-1.5 flex flex-wrap gap-1.5">
-            {payNote(l).map((n) => (
-              <span key={n} className="rounded-full bg-ink/90 px-2.5 py-0.5 text-[12px] font-bold text-bf">
-                {n}
-              </span>
-            ))}
-          </p>
-        )}
       </div>
-      <span className="grid size-[86px] shrink-0 -rotate-12 place-items-center rounded-full border-[3px] border-ink font-display text-[19px] uppercase leading-none">
-        <span className="grid size-[74px] place-items-center rounded-full border border-dashed border-ink/70">Vendido</span>
-      </span>
+      {!compact && (
+        <span className="grid size-[78px] shrink-0 -rotate-12 place-items-center rounded-full border-[3px] border-ink font-display text-[17px] uppercase leading-none">
+          <span className="grid size-[66px] place-items-center rounded-full border border-dashed border-ink/70">Vendido</span>
+        </span>
+      )}
     </li>
   );
 }
 
-function HotCard({ l }: { l: FechamentoLead }) {
+function HotCard({ l, staged }: { l: FechamentoLead; staged: boolean }) {
   const c = TEMP.quente.color;
   return (
-    <li className="flex min-w-0 flex-col justify-between gap-2 rounded-2xl border-2 bg-[#160c08] px-5 py-4 shadow-[0_0_28px_rgb(255_90_31/0.22)]" style={{ borderColor: c }}>
+    <li
+      className={`flex min-w-0 flex-col justify-between gap-1.5 rounded-2xl border-2 bg-[#160c08] px-5 py-3.5 shadow-[0_0_24px_rgb(255_90_31/0.2)] ${staged ? "h-[118px]" : ""}`}
+      style={{ borderColor: c }}
+    >
       <div className="min-w-0">
         <p className="truncate text-[24px] font-black leading-tight text-white">{l.nome}</p>
         <p className="truncate text-[15px] text-neutral-400">{[place(l), l.closer && `closer ${l.closer}`].filter(Boolean).join("  ·  ")}</p>
       </div>
-      <p className="flex flex-wrap gap-1.5">
+      <p className={`flex gap-1.5 ${staged ? "overflow-hidden" : "flex-wrap"}`}>
         {l.status && (
           <Chip color={c} solid>
             {l.status}
@@ -573,11 +610,22 @@ export default function Fechamento() {
                 <div className="flex flex-col gap-3">
                   <SectionTitle t="vendido" n={stats.by.vendido.length} />
                   {stats.by.vendido.length ? (
-                    <ul className={`grid gap-4 pr-2 ${staged ? "grid-cols-[repeat(auto-fill,minmax(400px,1fr))]" : "grid-cols-1"}`}>
-                      {stats.by.vendido.map((l) => (
-                        <SoldCard key={l.id} l={l} fresh={freshId === l.nome} />
-                      ))}
-                    </ul>
+                    <Belt
+                      count={stats.by.vendido.length}
+                      minW={stats.by.vendido.length > 3 ? 250 : 320}
+                      staged={staged}
+                      render={(copy) =>
+                        stats.by.vendido.map((l) => (
+                          <SoldCard
+                            key={copy ? `c-${l.id}` : l.id}
+                            l={l}
+                            fresh={freshId === l.nome}
+                            compact={staged && stats.by.vendido.length > 3}
+                            staged={staged}
+                          />
+                        ))
+                      }
+                    />
                   ) : (
                     <p className="text-lg text-neutral-500">A primeira franquia do fechamento aparece aqui.</p>
                   )}
@@ -586,11 +634,12 @@ export default function Fechamento() {
                 <div className="flex flex-col gap-3">
                   <SectionTitle t="quente" n={stats.by.quente.length} />
                   {stats.by.quente.length ? (
-                    <ul className={`grid gap-3 ${staged ? "grid-cols-[repeat(auto-fill,minmax(300px,1fr))]" : "grid-cols-1"}`}>
-                      {stats.by.quente.map((l) => (
-                        <HotCard key={l.id} l={l} />
-                      ))}
-                    </ul>
+                    <Belt
+                      count={stats.by.quente.length}
+                      minW={260}
+                      staged={staged}
+                      render={(copy) => stats.by.quente.map((l) => <HotCard key={copy ? `c-${l.id}` : l.id} l={l} staged={staged} />)}
+                    />
                   ) : (
                     <p className="text-lg text-neutral-500">Nenhum lead quente agora.</p>
                   )}

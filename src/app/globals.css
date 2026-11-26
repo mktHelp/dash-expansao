@@ -371,3 +371,10 @@ html.champion .panel {
 @media (prefers-reduced-motion: reduce) {
   .ribbon-scroll { animation: none; }
 }
+/* faixa de cards que circula de lado (vendidos/quentes quando não cabem) */
+@keyframes marquee-x { to { transform: translateX(-50%); } }
+.animate-marquee-x { animation: marquee-x linear infinite; will-change: transform; }
+.belt > li { width: calc(var(--belt-w) - 16px); margin-right: 16px; flex: none; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-x { animation-duration: 240s !important; }
+}

@@ -9,6 +9,9 @@ import { fetchViaCsv, fetchViaServiceAccount } from "./sheets";
 import { hashId, norm, titleCase, toUF } from "./normalize";
 import type { Faltante, FechamentoLead, FechamentoPayload, Temperatura } from "./types";
 
+/** "entre-ijuís" -> "Entre-Ijuís" */
+const city = (s: string) => titleCase(s).replace(/-(\p{L})/gu, (_, c: string) => `-${c.toUpperCase()}`);
+
 // Temperatura que o time definiu no infográfico do fechamento (26/11), por
 // lead. A chave é um hash do nome (o repositório é público: nada de nome aqui).
 // Se a aba ganhar uma coluna "Temperatura", ela vale mais que esta lista.
@@ -179,7 +182,7 @@ function parseAoVivo(rows: string[][]): Pick<FechamentoPayload, "leads" | "desca
       id: dup ? `${key}-${dup}` : key,
       row: i + 1,
       nome: displayName(full),
-      cidade: titleCase(get(r, "cidade")),
+      cidade: city(get(r, "cidade")),
       uf: toUF(get(r, "uf")),
       status: statusLabel(status),
       temp,
@@ -223,7 +226,7 @@ function parseFaltantes(rows: string[][]): Faltante[] {
       id: dup ? `${key}-${dup}` : key,
       row: i + 1,
       nome: displayName(full),
-      cidade: titleCase(get(r, "cidade")),
+      cidade: city(get(r, "cidade")),
       uf: toUF(get(r, "uf")),
       sdr: titleCase(get(r, "sdr")),
       mes: MESES.includes(mes) ? titleCase(mes === "marco" ? "março" : mes) : mes ? "Sem data" : "",
