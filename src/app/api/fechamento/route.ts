@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { getFechamentoPayload } from "@/lib/fechamento";
+import { updateCounter } from "@/lib/record";
 import { getTelaoMeta, telaoAvailable } from "@/lib/telao";
 import type { FechamentoPayload } from "@/lib/types";
 
@@ -9,17 +10,27 @@ export async function GET() {
   try {
     const payload = await getFechamentoPayload();
 
+    // relógio da reativação, igual em todas as telas: só um total MAIOR que o
+    // recorde conta como reativação nova (desmarcar e marcar não zera nada).
+    // O mesmo comando no Redis devolve o telão.
     let telao: FechamentoPayload["telao"] = null;
+    let reativacao: FechamentoPayload["reativacao"] = null;
     if (telaoAvailable()) {
+      const reativados = payload.faltantes.filter((f) => f.etapa === "reativado" || f.etapa === "reserva" || f.etapa === "franquia").length;
       try {
-        telao = await getTelaoMeta();
+        const r = await updateCounter("reativacao", reativados);
+        if (r) {
+          reativacao = { max: r.max, at: r.at };
+          telao = r.telao;
+        }
       } catch (err) {
-        console.error("[api/fechamento] telão", err);
+        console.error("[api/fechamento] recorde de reativação", err);
+        telao = await getTelaoMeta().catch(() => null);
       }
     }
 
     const build = process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "local";
-    return Response.json({ ...payload, telao, build } satisfies FechamentoPayload, {
+    return Response.json({ ...payload, telao, reativacao, build } satisfies FechamentoPayload, {
       headers: {
         "Cache-Control": "no-store",
         // a CDN segura 10s para proteger a cota do Google com muitas telas abertas

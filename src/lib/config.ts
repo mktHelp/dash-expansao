@@ -51,6 +51,7 @@ export const TIMEZONE = "America/Sao_Paulo";
 // ---- Alarme de inatividade ----
 // Minutos sem presença confirmada NOVA (ou convite novo) até o alerta vermelho aparecer.
 export const ALERT_PRESENCA_MIN = Number(process.env.NEXT_PUBLIC_ALERTA_PRESENCA_MIN ?? 5) || 5;
+export const ALERT_REATIVACAO_MIN = Number(process.env.NEXT_PUBLIC_ALERTA_REATIVACAO_MIN ?? 5) || 5;
 export const ALERT_CONVITE_MIN = Number(process.env.NEXT_PUBLIC_ALERTA_CONVITE_MIN ?? 5) || 5;
 // Expediente: o relógio só corre nesse horário (Brasília) e nesses dias
 // (0 = domingo … 6 = sábado). Fora dele o alarme some e o relógio pausa,

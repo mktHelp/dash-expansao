@@ -1,12 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { Flame, Maximize, RotateCcw, Snowflake, Thermometer, Trophy, Volume2, VolumeX } from "lucide-react";
+import { Flame, Maximize, RotateCcw, Snowflake, Thermometer, Timer, Trophy, Volume2, VolumeX } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { confettiBurst, flushPendingVictory, playVictory, preloadVictory } from "@/lib/celebrate";
-import { POLL_MS } from "@/lib/config";
+import { ALERT_REATIVACAO_MIN, POLL_MS } from "@/lib/config";
 import { getAudio, readAudioState, reloadedRecently, serverAudioState, subscribeAudio, useClock } from "@/lib/live";
 import type { Faltante, FechamentoLead, FechamentoPayload, Temperatura } from "@/lib/types";
+import { isWorkTime, workMinutes } from "@/lib/watch";
 import FitStage, { useStaged } from "./FitStage";
 import { TelaoCard } from "./Telao";
 
@@ -49,6 +50,7 @@ function useFechamento(onAlerts: (a: Alert[]) => void) {
   const [data, setData] = useState<FechamentoPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const known = useRef<{ vendidos: Set<string>; etapas: Map<string, number> } | null>(null);
+  const localWatch = useRef<{ max: number; at: number } | null>(null);
   const build = useRef<string | null>(null);
   const onAlertsRef = useRef(onAlerts);
   useEffect(() => {
@@ -64,7 +66,13 @@ function useFechamento(onAlerts: (a: Alert[]) => void) {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
         if (!alive) return;
-        const payload = json as FechamentoPayload;
+        let payload = json as FechamentoPayload;
+        if (!payload.reativacao) {
+          // sem Redis: relógio desta tela (mesma regra: só um total maior conta)
+          const n = payload.faltantes.filter((f) => ETAPA[f.etapa].rank <= 2).length;
+          if (!localWatch.current || n > localWatch.current.max) localWatch.current = { max: n, at: Date.now() };
+          payload = { ...payload, reativacao: { ...localWatch.current }, reativacaoLocal: true };
+        }
         // deploy novo: recarrega sozinho (a TV não precisa de ninguém)
         if (payload.build) {
           if (build.current && build.current !== payload.build && !reloadedRecently()) {
@@ -437,6 +445,61 @@ function LiveNote({ now, fetchedAt, error }: { now: number; fetchedAt: number | 
   );
 }
 
+/** "há 3 min", "há 1 h 12 min" */
+const since = (m: number) => (m < 1 ? "agora" : m < 60 ? `há ${m} min` : `há ${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
+const hhmm = (ts: number) => new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(ts);
+
+/** Relógio da reativação, sempre visível no painel. */
+function ReactivationClock({ minutes, working, late, shared }: { minutes: number; working: boolean; late: boolean; shared: boolean }) {
+  return (
+    <p className={`flex items-center gap-1.5 text-[15px] ${late ? "font-bold text-red-400" : "text-neutral-400"}`}>
+      <Timer size={16} className={late ? "text-red-400" : "text-[#34d399]"} />
+      Última reativação nova <b className={late ? "text-red-400" : "text-white"}>{since(minutes)}</b>
+      {!working && <span className="text-neutral-500">· fora do expediente, pausado</span>}
+      {!shared && <span className="text-neutral-600">· relógio desta tela</span>}
+    </p>
+  );
+}
+
+/** Giroflex: cobre só o painel da reativação, sem som. */
+function Giroflex({ minutes, at, staged }: { minutes: number; at: number; staged: boolean }) {
+  // gira mais rápido conforme o tempo passa (a cada 5 min além do limite)
+  const step = Math.min(4, Math.floor((minutes - ALERT_REATIVACAO_MIN) / 5));
+  const spin = `${1.6 - step * 0.25}s`;
+  if (!staged)
+    // celular: o painel é comprido, então o alerta vira uma faixa no topo dele
+    return (
+      <div className="giroflex relative mb-5 overflow-hidden rounded-2xl border-2 border-red-500/80 px-5 py-5 text-center" style={{ ["--spin" as string]: spin }} role="alert">
+        <div className="giroflex-tint absolute inset-0" />
+        <div className="giroflex-beams absolute left-1/2 top-10 size-[1400px] -translate-x-1/2 -translate-y-1/2" />
+        <div className="relative flex flex-col items-center">
+          <span className="giroflex-dome scale-75" aria-hidden />
+          <p className="mt-6 font-display text-4xl uppercase leading-none text-red-400">Atenção!</p>
+          <p className="mt-2 font-display text-2xl uppercase leading-tight text-white">{minutes} min sem nova reativação</p>
+          <p className="mt-2 text-sm text-neutral-300">A última foi às {hhmm(at)}.</p>
+        </div>
+      </div>
+    );
+  return (
+    <div className="giroflex pointer-events-none absolute inset-0 z-30 overflow-hidden" style={{ ["--spin" as string]: spin }} role="alert">
+      <div className="giroflex-tint absolute inset-0" />
+      <div className="giroflex-beams absolute left-1/2 top-[132px] size-[2600px] -translate-x-1/2 -translate-y-1/2" />
+      <div className="relative flex h-full flex-col items-center px-8 pt-[64px] text-center">
+        <span className="giroflex-dome" aria-hidden />
+        <div className="mt-16 w-full rounded-3xl border-2 border-red-500/80 bg-black/80 px-8 py-8 shadow-[0_0_60px_rgb(239_68_68/0.45)]">
+          <p className="font-display text-[64px] uppercase leading-none text-red-500">Atenção!</p>
+          <p className="mt-3 font-display text-[44px] uppercase leading-[1.05] text-white">
+            {minutes} min sem
+            <br />
+            nova reativação
+          </p>
+          <p className="mt-4 text-lg text-neutral-300">A última foi às {hhmm(at)}. Bora ligar para os faltantes!</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const RIBBON = ["Black Friday", "Fechamento", "Reativação", "Bora fechar"];
 
 // ---------------- tela ----------------
@@ -480,6 +543,14 @@ export default function Fechamento() {
   const stats = useStats(data);
   const current = queue[0];
 
+  // relógio da reativação: o recorde vem do servidor (igual em todas as telas).
+  // Sem Redis, cai para um relógio desta tela.
+  const [forceAlarm, setForceAlarm] = useState(0);
+  const watch = data?.reativacao ? { ...data.reativacao, shared: !data.reativacaoLocal } : null;
+  const idleMin = watch && now ? (forceAlarm ? ALERT_REATIVACAO_MIN + forceAlarm : workMinutes(watch.at, now)) : 0;
+  const working = forceAlarm > 0 || (now ? isWorkTime(now) : true);
+  const alarm = !!watch && working && idleMin >= ALERT_REATIVACAO_MIN;
+
   // modo de teste: ?simular=1 e teclas V (venda), R (reativado)
   useEffect(() => {
     if (!/[?&]simular(=|&|$)/.test(window.location.search)) return;
@@ -487,6 +558,7 @@ export default function Fechamento() {
       const k = e.key.toLowerCase();
       if (k === "v") onAlerts([{ kind: "vendido", nome: "Maria Souza", quem: "Fernando" }]);
       if (k === "r") onAlerts([{ kind: "reativado", nome: "João Lima", quem: "Valmor" }]);
+      if (k === "g") setForceAlarm((f) => (f >= 20 ? 0 : f + 5)); // giroflex: +5 min a cada toque
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -673,7 +745,12 @@ export default function Fechamento() {
         </section>
 
         {/* ================= reativação ================= */}
-        <section className={`flex min-h-0 flex-col ${staged ? "rounded-t-3xl border border-b-0 border-white/[0.09] bg-[#0f0f0f] px-7 pt-6" : ""}`}>
+        <section
+          className={`relative flex min-h-0 flex-col ${staged ? "overflow-hidden rounded-t-3xl border border-b-0 border-white/[0.09] bg-[#0f0f0f] px-7 pt-6" : ""} ${
+            alarm ? "border-red-500/60" : ""
+          }`}
+        >
+          {alarm && watch && <Giroflex minutes={idleMin} at={watch.at} staged={staged} />}
           <div className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-full bg-[#34d399] text-ink">
               <RotateCcw size={20} strokeWidth={2.6} />
@@ -681,6 +758,11 @@ export default function Fechamento() {
             <h2 className={`font-display uppercase leading-none text-white ${staged ? "text-[52px]" : "text-5xl"}`}>Reativação</h2>
           </div>
           <p className="mt-2 text-[15px] text-neutral-400">Quem tinha COF e faltou na Black. Cada um que voltar conta aqui.</p>
+          {watch && (
+            <div className="mt-1.5">
+              <ReactivationClock minutes={idleMin} working={working} late={alarm} shared={watch.shared} />
+            </div>
+          )}
 
           {stats && (
             <>

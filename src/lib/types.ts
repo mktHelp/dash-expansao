@@ -107,6 +107,9 @@ export type FechamentoPayload = {
   leads: FechamentoLead[];
   descartados: number;
   faltantes: Faltante[];
+  /** Recorde de reativações e quando subiu (Redis, igual em todas as telas). null = sem Redis. */
+  reativacao?: { max: number; at: number } | null;
+  reativacaoLocal?: boolean; // só no navegador: relógio desta tela (sem Redis)
   source: "sheets" | "csv" | "demo";
   fetchedAt: number;
   build?: string;

@@ -378,3 +378,46 @@ html.champion .panel {
 @media (prefers-reduced-motion: reduce) {
   .animate-marquee-x { animation-duration: 240s !important; }
 }
+
+/* ---------- giroflex da reativação (sem som) ---------- */
+.giroflex-tint {
+  background: radial-gradient(120% 80% at 50% 12%, rgb(127 0 0 / 0.55), rgb(20 0 0 / 0.82) 70%);
+  animation: giro-tint var(--spin, 1.6s) linear infinite;
+}
+@keyframes giro-tint { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+.giroflex-beams {
+  background: conic-gradient(from 0deg,
+    rgb(255 40 40 / 0.55) 0deg, rgb(255 40 40 / 0) 34deg,
+    transparent 34deg 180deg,
+    rgb(255 40 40 / 0.55) 180deg, rgb(255 40 40 / 0) 214deg,
+    transparent 214deg 360deg);
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  animation: giro-spin var(--spin, 1.6s) linear infinite;
+}
+@keyframes giro-spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.giroflex-dome {
+  position: relative;
+  width: 132px;
+  height: 66px;
+  border-radius: 66px 66px 10px 10px;
+  background: radial-gradient(60% 90% at 50% 70%, #fff 0 12%, #ff4d4d 30%, #b80000 75%);
+  box-shadow: 0 0 40px 12px rgb(255 30 30 / 0.75), 0 0 120px 40px rgb(255 30 30 / 0.35);
+  animation: giro-dome calc(var(--spin, 1.6s) / 2) linear infinite;
+}
+.giroflex-dome::after {
+  content: "";
+  position: absolute;
+  left: -14px;
+  right: -14px;
+  bottom: -16px;
+  height: 18px;
+  border-radius: 6px;
+  background: #1b1b1b;
+  border-top: 2px solid #3a3a3a;
+}
+@keyframes giro-dome { 0%, 100% { filter: brightness(1.25); } 50% { filter: brightness(0.75); } }
+@media (prefers-reduced-motion: reduce) {
+  .giroflex-beams { animation: none; }
+  .giroflex-tint, .giroflex-dome { animation: none; }
+}

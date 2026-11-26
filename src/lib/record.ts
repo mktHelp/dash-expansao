@@ -57,6 +57,36 @@ out[#out + 1] = redis.call("GET", KEYS[2]) or ""
 return out
 `;
 
+// Um campo só (ex.: "reativacao"), mesma regra do recorde acima.
+const SCRIPT_ONE = `
+local now = tonumber(ARGV[1])
+local f = ARGV[2]
+local count = tonumber(ARGV[3])
+local max = tonumber(redis.call("HGET", KEYS[1], f .. ":max"))
+local at = tonumber(redis.call("HGET", KEYS[1], f .. ":at"))
+if (not max) or (not at) or count > max then
+  max = count
+  at = now
+  redis.call("HSET", KEYS[1], f .. ":max", tostring(max), f .. ":at", tostring(at))
+end
+return {tostring(max), tostring(at), redis.call("GET", KEYS[2]) or ""}
+`;
+
+/**
+ * Recorde de um contador (ex.: reativações) e quando ele subiu pela última
+ * vez, igual para todas as telas. Devolve também o telão no ar.
+ */
+export async function updateCounter(
+  field: string,
+  count: number,
+  now = Date.now(),
+): Promise<{ max: number; at: number; telao: TelaoMeta | null } | null> {
+  if (!sharedRecordConfigured) return null;
+  const result = await redis(["EVAL", SCRIPT_ONE, "2", KEY, TELAO_META_KEY, String(now), field, String(count)]);
+  if (!Array.isArray(result) || result.length < 3) throw new Error("Resposta inesperada do Redis");
+  return { max: Number(result[0]), at: Number(result[1]), telao: parseTelaoMeta(result[2]) };
+}
+
 export function parseTelaoMeta(raw: unknown): TelaoMeta | null {
   if (typeof raw !== "string" || !raw) return null;
   try {
