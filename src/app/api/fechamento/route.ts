@@ -20,7 +20,8 @@ export async function GET() {
     let telao: FechamentoPayload["telao"] = null;
     let reativacao: FechamentoPayload["reativacao"] = null;
     if (telaoAvailable()) {
-      const reativados = payload.faltantes.filter((f) => f.etapa === "reativado" || f.etapa === "reserva" || f.etapa === "franquia").length;
+      // descartado também conta: o faltante foi trabalhado
+      const reativados = payload.faltantes.filter((f) => ["reativado", "descartado", "reserva", "franquia"].includes(f.etapa)).length;
       try {
         const r = await updateCounter("reativacao", reativados, REATIVACAO_INICIO);
         if (r) {

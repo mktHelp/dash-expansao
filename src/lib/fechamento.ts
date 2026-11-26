@@ -197,6 +197,12 @@ function parseAoVivo(rows: string[][]): Pick<FechamentoPayload, "leads" | "desca
   return { leads, descartados };
 }
 
+/** "Descartado", "desistiu", "perdido", "sem interesse" na coluna Reativado. */
+function isDiscard(s: string): boolean {
+  const v = norm(s);
+  return ["descart", "desist", "perdid", "sem interesse", "nao tem interesse"].some((k) => v.startsWith(k));
+}
+
 const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 function parseFaltantes(rows: string[][]): Faltante[] {
@@ -216,11 +222,13 @@ function parseFaltantes(rows: string[][]): Faltante[] {
       ? "franquia"
       : isDone(get(r, "reserva"))
         ? "reserva"
-        : isDone(reativado)
-          ? "reativado"
-          : reativado && !["nao", "n", "-", "0"].includes(norm(reativado))
-            ? "contato"
-            : "pendente";
+        : isDiscard(reativado)
+          ? "descartado"
+          : isDone(reativado)
+            ? "reativado"
+            : reativado && !["nao", "n", "-", "0"].includes(norm(reativado))
+              ? "contato"
+              : "pendente";
     const mes = norm(get(r, "mes"));
     out.push({
       id: dup ? `${key}-${dup}` : key,

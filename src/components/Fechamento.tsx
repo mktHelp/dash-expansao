@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Flame, Maximize, RotateCcw, Snowflake, Thermometer, Timer, Trophy, Volume2, VolumeX } from "lucide-react";
+import { Flame, Maximize, RotateCcw, Snowflake, Thermometer, Timer, Trash2, Trophy, Volume2, VolumeX } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { confettiBurst, flushPendingVictory, playVictory, preloadVictory } from "@/lib/celebrate";
 import { ALERT_REATIVACAO_MIN, POLL_MS } from "@/lib/config";
@@ -26,9 +26,13 @@ const ETAPA: Record<Faltante["etapa"], { label: string; color: string; rank: num
   franquia: { label: "Franquia paga", color: "#f8be19", rank: 0 },
   reserva: { label: "Reserva paga", color: "#f8be19", rank: 1 },
   reativado: { label: "Reativado", color: "#34d399", rank: 2 },
-  contato: { label: "Em contato", color: "#5aa9ff", rank: 3 },
-  pendente: { label: "A reativar", color: "#737373", rank: 4 },
+  // descartado conta como reativado (o faltante foi trabalhado), mas sem festa
+  descartado: { label: "Descartado", color: "#a3a3a3", rank: 3 },
+  contato: { label: "Em contato", color: "#5aa9ff", rank: 4 },
+  pendente: { label: "A reativar", color: "#737373", rank: 5 },
 };
+/** Trabalhado: reativado, descartado, reserva ou franquia. */
+const WORKED = 3;
 const MES_RANK = ["Dezembro", "Novembro", "Outubro", "Setembro", "Agosto", "Julho", "Junho", "Maio", "Abril", "Março", "Fevereiro", "Janeiro"];
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
@@ -69,7 +73,7 @@ function useFechamento(onAlerts: (a: Alert[]) => void) {
         let payload = json as FechamentoPayload;
         if (!payload.reativacao) {
           // sem Redis: relógio desta tela (mesma regra: só um total maior conta)
-          const n = payload.faltantes.filter((f) => ETAPA[f.etapa].rank <= 2).length;
+          const n = payload.faltantes.filter((f) => ETAPA[f.etapa].rank <= WORKED).length;
           if (!localWatch.current || n > localWatch.current.max) localWatch.current = { max: n, at: Date.now() };
           payload = { ...payload, reativacao: { ...localWatch.current }, reativacaoLocal: true };
         }
@@ -90,7 +94,7 @@ function useFechamento(onAlerts: (a: Alert[]) => void) {
             if (l.temp === "vendido" && !known.current.vendidos.has(l.id))
               alerts.push({ kind: "vendido", nome: l.nome, quem: l.closer });
           for (const f of payload.faltantes) {
-            const before = known.current.etapas.get(f.id) ?? 4;
+            const before = known.current.etapas.get(f.id) ?? ETAPA.pendente.rank;
             const now = ETAPA[f.etapa].rank;
             if (now < before && now <= 2) alerts.push({ kind: f.etapa as Alert["kind"], nome: f.nome, quem: f.sdr });
           }
@@ -128,27 +132,30 @@ function useStats(data: FechamentoPayload | null) {
 
     const falt = [...data.faltantes].sort(
       (a, b) =>
-        ETAPA[a.etapa].rank - ETAPA[b.etapa].rank ||
+        // descartados vão para o fim da lista
+        (a.etapa === "descartado" ? 9 : ETAPA[a.etapa].rank) - (b.etapa === "descartado" ? 9 : ETAPA[b.etapa].rank) ||
         (MES_RANK.indexOf(a.mes) + 99) % 99 - ((MES_RANK.indexOf(b.mes) + 99) % 99) ||
         a.nome.localeCompare(b.nome),
     );
     const count = (k: Faltante["etapa"][]) => data.faltantes.filter((f) => k.includes(f.etapa)).length;
-    const reativados = count(["reativado", "reserva", "franquia"]);
+    const reativados = count(["reativado", "descartado", "reserva", "franquia"]);
+    const descartados = count(["descartado"]);
     const reservas = count(["reserva", "franquia"]);
     const franquias = count(["franquia"]);
     const contato = count(["contato"]);
 
-    const sdrMap = new Map<string, { name: string; total: number; reativados: number; vendas: number }>();
+    const sdrMap = new Map<string, { name: string; total: number; reativados: number; vendas: number; descartes: number }>();
     for (const f of data.faltantes) {
       const name = f.sdr || "Sem SDR";
-      const s = sdrMap.get(name) ?? { name, total: 0, reativados: 0, vendas: 0 };
+      const s = sdrMap.get(name) ?? { name, total: 0, reativados: 0, vendas: 0, descartes: 0 };
       s.total++;
-      if (ETAPA[f.etapa].rank <= 2) s.reativados++;
+      if (ETAPA[f.etapa].rank <= WORKED) s.reativados++;
+      if (f.etapa === "descartado") s.descartes++;
       if (ETAPA[f.etapa].rank <= 1) s.vendas++;
       sdrMap.set(name, s);
     }
     const sdrs = [...sdrMap.values()].sort((a, b) => b.reativados - a.reativados || b.total - a.total || a.name.localeCompare(b.name));
-    return { by, ativos: data.leads.length, falt, reativados, reservas, franquias, contato, sdrs };
+    return { by, ativos: data.leads.length, falt, reativados, descartados, reservas, franquias, contato, sdrs };
   }, [data]);
 }
 
@@ -362,24 +369,25 @@ function Tile({ t, n, total }: { t: Temperatura; n: number; total: number }) {
 
 function FaltRow({ f }: { f: Faltante }) {
   const e = ETAPA[f.etapa];
-  const done = e.rank <= 2;
+  const done = e.rank <= WORKED;
+  const trash = f.etapa === "descartado";
   return (
     <li className={`flex items-center gap-3 border-b border-white/[0.06] px-1 py-2.5 ${done ? "" : ""}`}>
       <span
         className="grid size-9 shrink-0 place-items-center rounded-full font-display text-[14px]"
-        style={done ? { background: e.color, color: "#0a0a0a" } : { border: "2px solid #3a3a3a", color: "#8a8a8a" }}
+        style={trash ? { background: "#262626", color: "#a3a3a3" } : done ? { background: e.color, color: "#0a0a0a" } : { border: "2px solid #3a3a3a", color: "#8a8a8a" }}
       >
-        {initials(f.nome)}
+        {trash ? <Trash2 size={16} /> : initials(f.nome)}
       </span>
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-[17px] font-bold leading-tight ${done ? "text-white" : "text-neutral-200"}`}>{f.nome}</p>
+        <p className={`truncate text-[17px] font-bold leading-tight ${trash ? "text-neutral-400 line-through decoration-neutral-600" : done ? "text-white" : "text-neutral-200"}`}>{f.nome}</p>
         <p className="truncate text-[13px] text-neutral-500">
           {[place(f), f.mes && `COF ${f.mes.toLowerCase()}`].filter(Boolean).join("  ·  ")}
         </p>
       </div>
       <span className="hidden shrink-0 text-[13px] text-neutral-500 sm:inline">{f.sdr}</span>
       <span className="w-[118px] shrink-0 text-right">
-        <Chip color={e.color} solid={done}>
+        <Chip color={e.color} solid={done && !trash}>
           {f.etapa === "contato" && f.nota ? f.nota : e.label}
         </Chip>
       </span>
@@ -772,7 +780,18 @@ export default function Fechamento() {
                   <p className="font-display text-[40px] leading-none text-neutral-500">/ {stats.falt.length}</p>
                   <p className="text-[13px] font-bold uppercase tracking-[0.18em] text-neutral-300">reativados</p>
                 </div>
-                <div className="mb-3 ml-auto text-right text-[14px] text-neutral-400">
+                <div className="mb-3 ml-auto flex items-end gap-5 text-[14px] text-neutral-400">
+                  <div
+                    className="flex items-center gap-2 rounded-2xl border border-white/[0.1] bg-[#171717] px-3 py-2"
+                    title="Descartados na reativação (contam como reativados)"
+                  >
+                    <Trash2 size={26} className="text-neutral-400" />
+                    <div className="leading-none">
+                      <p className="font-display text-[30px] text-white">{stats.descartados}</p>
+                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-500">{stats.descartados === 1 ? "descarte" : "descartes"}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
                   {stats.contato > 0 && (
                     <p>
                       <b className="text-[#5aa9ff]">{stats.contato}</b> em contato
@@ -781,6 +800,7 @@ export default function Fechamento() {
                   <p>
                     <b className="text-white">{stats.falt.length - stats.reativados - stats.contato}</b> a reativar
                   </p>
+                  </div>
                 </div>
               </div>
 
@@ -805,6 +825,7 @@ export default function Fechamento() {
                     </div>
                     <p className="mt-1.5 text-[12px] text-neutral-500">
                       {s.vendas ? `${s.vendas} ${s.vendas === 1 ? "venda" : "vendas"} · ` : ""}
+                      {s.descartes ? `${s.descartes} ${s.descartes === 1 ? "descarte" : "descartes"} · ` : ""}
                       {s.total - s.reativados} a reativar
                     </p>
                   </li>
