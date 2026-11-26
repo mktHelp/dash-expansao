@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Flame, Maximize, RotateCcw, Snowflake, Thermometer, Timer, Trash2, Trophy, Volume2, VolumeX } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { confettiBurst, flushPendingVictory, playVictory, preloadVictory } from "@/lib/celebrate";
-import { ALERT_REATIVACAO_MIN, POLL_MS } from "@/lib/config";
+import { ALERT_REATIVACAO_MIN, META_NEGOCIACAO, POLL_MS } from "@/lib/config";
 import { getAudio, readAudioState, reloadedRecently, serverAudioState, subscribeAudio, useClock } from "@/lib/live";
 import type { Faltante, FechamentoLead, FechamentoPayload, Temperatura } from "@/lib/types";
 import { isWorkTime, workMinutes } from "@/lib/watch";
@@ -25,14 +25,16 @@ const ORDER: Temperatura[] = ["vendido", "quente", "morno", "frio"];
 const ETAPA: Record<Faltante["etapa"], { label: string; color: string; rank: number }> = {
   franquia: { label: "Franquia paga", color: "#f8be19", rank: 0 },
   reserva: { label: "Reserva paga", color: "#f8be19", rank: 1 },
-  reativado: { label: "Reativado", color: "#34d399", rank: 2 },
+  negociacao: { label: "Em negociação", color: "#b794ff", rank: 2 },
+  reativado: { label: "Reativado", color: "#34d399", rank: 3 },
   // descartado conta como reativado (o faltante foi trabalhado), mas sem festa
-  descartado: { label: "Descartado", color: "#a3a3a3", rank: 3 },
-  contato: { label: "Em contato", color: "#5aa9ff", rank: 4 },
-  pendente: { label: "A reativar", color: "#737373", rank: 5 },
+  descartado: { label: "Descartado", color: "#a3a3a3", rank: 4 },
+  contato: { label: "Em contato", color: "#5aa9ff", rank: 5 },
+  pendente: { label: "A reativar", color: "#737373", rank: 6 },
 };
-/** Trabalhado: reativado, descartado, reserva ou franquia. */
-const WORKED = 3;
+/** Trabalhado: reativado, em negociação, descartado, reserva ou franquia. */
+const WORKED = 4;
+const NEGOCIACAO = "#b794ff";
 const MES_RANK = ["Dezembro", "Novembro", "Outubro", "Setembro", "Agosto", "Julho", "Junho", "Maio", "Abril", "Março", "Fevereiro", "Janeiro"];
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
@@ -48,7 +50,7 @@ const place = (l: { cidade: string; uf: string }) => [l.cidade, l.uf].filter(Boo
 
 // ---------------- dados ----------------
 
-type Alert = { kind: "vendido" | "reserva" | "franquia" | "reativado"; nome: string; quem: string };
+type Alert = { kind: "vendido" | "reserva" | "franquia" | "negociacao" | "meta-negociacao" | "reativado"; nome: string; quem: string };
 
 function useFechamento(onAlerts: (a: Alert[]) => void) {
   const [data, setData] = useState<FechamentoPayload | null>(null);
@@ -96,10 +98,18 @@ function useFechamento(onAlerts: (a: Alert[]) => void) {
           for (const f of payload.faltantes) {
             const before = known.current.etapas.get(f.id) ?? ETAPA.pendente.rank;
             const now = ETAPA[f.etapa].rank;
-            if (now < before && now <= 2) alerts.push({ kind: f.etapa as Alert["kind"], nome: f.nome, quem: f.sdr });
+            if (now < before && now <= ETAPA.reativado.rank) alerts.push({ kind: f.etapa as Alert["kind"], nome: f.nome, quem: f.sdr });
           }
           // vendas primeiro, reativações depois
-          const rank = { vendido: 0, franquia: 1, reserva: 2, reativado: 3 };
+          // meta de negociações: só quando cruza a meta (não repete)
+          const neg = (m: Map<string, number>) => [...m.values()].filter((r) => r <= ETAPA.negociacao.rank).length;
+          const negBefore = neg(known.current.etapas);
+          const merged = new Map(etapas);
+          known.current.etapas.forEach((r, id) => merged.set(id, Math.min(r, merged.get(id) ?? r)));
+          const negNow = neg(merged);
+          if (negBefore < META_NEGOCIACAO && negNow >= META_NEGOCIACAO)
+            alerts.push({ kind: "meta-negociacao", nome: `${META_NEGOCIACAO} negociações abertas`, quem: "" });
+          const rank = { vendido: 0, franquia: 1, reserva: 2, "meta-negociacao": 3, negociacao: 4, reativado: 5 };
           alerts.sort((a, b) => rank[a.kind] - rank[b.kind]);
           if (alerts.length && alerts.length <= 8) onAlertsRef.current(alerts);
           known.current.vendidos.forEach((id) => vendidos.add(id));
@@ -138,24 +148,26 @@ function useStats(data: FechamentoPayload | null) {
         a.nome.localeCompare(b.nome),
     );
     const count = (k: Faltante["etapa"][]) => data.faltantes.filter((f) => k.includes(f.etapa)).length;
-    const reativados = count(["reativado", "descartado", "reserva", "franquia"]);
+    const reativados = count(["reativado", "negociacao", "descartado", "reserva", "franquia"]);
+    const negociacoes = count(["negociacao", "reserva", "franquia"]);
     const descartados = count(["descartado"]);
     const reservas = count(["reserva", "franquia"]);
     const franquias = count(["franquia"]);
     const contato = count(["contato"]);
 
-    const sdrMap = new Map<string, { name: string; total: number; reativados: number; vendas: number; descartes: number }>();
+    const sdrMap = new Map<string, { name: string; total: number; reativados: number; negociacoes: number; vendas: number; descartes: number }>();
     for (const f of data.faltantes) {
       const name = f.sdr || "Sem SDR";
-      const s = sdrMap.get(name) ?? { name, total: 0, reativados: 0, vendas: 0, descartes: 0 };
+      const s = sdrMap.get(name) ?? { name, total: 0, reativados: 0, negociacoes: 0, vendas: 0, descartes: 0 };
       s.total++;
       if (ETAPA[f.etapa].rank <= WORKED) s.reativados++;
       if (f.etapa === "descartado") s.descartes++;
+      if (ETAPA[f.etapa].rank <= ETAPA.negociacao.rank) s.negociacoes++;
       if (ETAPA[f.etapa].rank <= 1) s.vendas++;
       sdrMap.set(name, s);
     }
     const sdrs = [...sdrMap.values()].sort((a, b) => b.reativados - a.reativados || b.total - a.total || a.name.localeCompare(b.name));
-    return { by, ativos: data.leads.length, falt, reativados, descartados, reservas, franquias, contato, sdrs };
+    return { by, ativos: data.leads.length, falt, reativados, negociacoes, descartados, reservas, franquias, contato, sdrs };
   }, [data]);
 }
 
@@ -413,9 +425,43 @@ function Step({ n, label, of, color, first }: { n: number; label: string; of?: n
   );
 }
 
+/** Meta de negociações abertas (sem giroflex). */
+function NegotiationGoal({ n, meta, reativados }: { n: number; meta: number; reativados: number }) {
+  const hit = n >= meta;
+  return (
+    <div className="mt-4 rounded-2xl border px-5 py-3.5" style={{ borderColor: `${NEGOCIACAO}55`, background: `${NEGOCIACAO}12` }}>
+      <div className="flex items-end justify-between gap-4">
+        <div className="flex items-end gap-3">
+          <p className="font-display text-[56px] leading-[0.85]" style={{ color: NEGOCIACAO }}>
+            {n}
+          </p>
+          <div className="pb-0.5">
+            <p className="font-display text-[26px] leading-none text-neutral-500">/ {meta}</p>
+            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-neutral-300">Negociações abertas</p>
+          </div>
+        </div>
+        <p className="pb-1 text-right text-[14px] text-neutral-400">
+          {hit ? (
+            <b style={{ color: NEGOCIACAO }}>Meta batida!</b>
+          ) : (
+            <>
+              faltam <b className="text-white">{meta - n}</b> para a meta
+            </>
+          )}
+          <br />
+          <span className="text-[12px] text-neutral-500">{pct(n, reativados)}% dos reativados</span>
+        </p>
+      </div>
+      <div className="relative mt-3 h-3 overflow-hidden rounded-full bg-white/[0.07]">
+        <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${Math.min(100, pct(n, meta))}%`, background: NEGOCIACAO }} />
+      </div>
+    </div>
+  );
+}
+
 function Announcement({ alert, onDone }: { alert: Alert; onDone: () => void }) {
   useEffect(() => {
-    const t = setTimeout(onDone, alert.kind === "reativado" ? 5500 : 8000);
+    const t = setTimeout(onDone, alert.kind === "reativado" || alert.kind === "negociacao" ? 5500 : 8000);
     return () => clearTimeout(t);
   }, [alert, onDone]);
   const title = {
@@ -423,14 +469,16 @@ function Announcement({ alert, onDone }: { alert: Alert; onDone: () => void }) {
     franquia: "Reativou e pagou a franquia!",
     reserva: "Reativou e garantiu a reserva!",
     reativado: "Faltante reativado!",
+    negociacao: "Abriu negociação!",
+    "meta-negociacao": "Meta de negociações batida!",
   }[alert.kind];
   return (
     <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-black/55">
-      <div style={{ "--announce-ms": alert.kind === "reativado" ? "5500ms" : "8000ms" } as React.CSSProperties} className="announce relative w-[min(860px,92vw)] -rotate-2 overflow-hidden rounded-3xl bg-bf px-12 py-10 text-center text-ink shadow-[10px_10px_0_#ff5a1f]">
+      <div style={{ "--announce-ms": alert.kind === "reativado" || alert.kind === "negociacao" ? "5500ms" : "8000ms" } as React.CSSProperties} className="announce relative w-[min(860px,92vw)] -rotate-2 overflow-hidden rounded-3xl bg-bf px-12 py-10 text-center text-ink shadow-[10px_10px_0_#ff5a1f]">
         <span aria-hidden className="hazard absolute inset-x-0 top-0 h-3.5" />
         <p className="font-display text-[64px] uppercase leading-none">{title}</p>
         <p className="mt-4 text-[40px] font-black leading-tight">{alert.nome}</p>
-        {alert.quem && <p className="mt-1 text-xl font-semibold text-ink/70">{alert.kind === "vendido" ? `fechada por ${alert.quem}` : `SDR ${alert.quem}`}</p>}
+        {alert.quem && alert.kind !== "meta-negociacao" && <p className="mt-1 text-xl font-semibold text-ink/70">{alert.kind === "vendido" ? `fechada por ${alert.quem}` : `SDR ${alert.quem}`}</p>}
         <span aria-hidden className="hazard absolute inset-x-0 bottom-0 h-3.5" />
       </div>
     </div>
@@ -540,10 +588,10 @@ export default function Fechamento() {
 
   const [queue, setQueue] = useState<Alert[]>([]);
   const onAlerts = useCallback((alerts: Alert[]) => {
-    setQueue((q) => [...q, ...alerts].slice(-6));
-    const venda = alerts.some((a) => a.kind !== "reativado");
-    if (venda) confettiBurst(5000);
-    // reativado: só o anúncio; venda: confete e som de vitória
+    setQueue((q) => [...q, ...alerts].slice(0, 6)); // os mais importantes vêm primeiro
+    // venda: confete e som; meta de negociações: confete; reativado e negociação: só o anúncio
+    const venda = alerts.some((a) => a.kind === "vendido" || a.kind === "reserva" || a.kind === "franquia");
+    if (venda || alerts.some((a) => a.kind === "meta-negociacao")) confettiBurst(5000);
     if (venda && soundRef.current) playVictory(getAudio());
   }, []);
   const dismiss = useCallback(() => setQueue((q) => q.slice(1)), []);
@@ -568,6 +616,7 @@ export default function Fechamento() {
       const k = e.key.toLowerCase();
       if (k === "v") onAlerts([{ kind: "vendido", nome: "Maria Souza", quem: "Fernando" }]);
       if (k === "r") onAlerts([{ kind: "reativado", nome: "João Lima", quem: "Valmor" }]);
+      if (k === "n") onAlerts([{ kind: "negociacao", nome: "Ana Costa", quem: "Fernando" }]);
       if (k === "g") setForceAlarm((f) => (f >= 20 ? 0 : f + 5)); // giroflex: +5 min a cada toque
     };
     window.addEventListener("keydown", onKey);
@@ -813,13 +862,15 @@ export default function Fechamento() {
               </div>
 
               <div className={`mt-4 gap-1 ${staged ? "flex" : "grid grid-cols-2"}`}>
-                <Step first n={stats.falt.length} label="Faltantes" color="#a3a3a3" />
-                <Step n={stats.reativados} label="Reativados" of={stats.falt.length} color="#34d399" />
+                <Step first n={stats.reativados} label="Reativados" of={stats.falt.length} color="#34d399" />
+                <Step n={stats.negociacoes} label="Negociação" color={NEGOCIACAO} />
                 <Step n={stats.reservas} label="Reservas" color="#f8be19" />
                 <Step n={stats.franquias} label="Franquias" color="#f8be19" />
               </div>
 
-              <ul className="mt-5 grid grid-cols-2 gap-3">
+              <NegotiationGoal n={stats.negociacoes} meta={META_NEGOCIACAO} reativados={stats.reativados - stats.descartados} />
+
+              <ul className="mt-4 grid grid-cols-2 gap-3">
                 {stats.sdrs.map((s) => (
                   <li key={s.name} className="rounded-2xl border border-white/[0.08] bg-[#151515] px-4 py-3">
                     <p className="flex items-baseline justify-between gap-2">
@@ -832,6 +883,7 @@ export default function Fechamento() {
                       <div className="h-full rounded-full bg-[#34d399]" style={{ width: `${pct(s.reativados, s.total)}%` }} />
                     </div>
                     <p className="mt-1.5 text-[12px] text-neutral-500">
+                      {s.negociacoes ? `${s.negociacoes} em negociação · ` : ""}
                       {s.vendas ? `${s.vendas} ${s.vendas === 1 ? "venda" : "vendas"} · ` : ""}
                       {s.descartes ? `${s.descartes} ${s.descartes === 1 ? "descarte" : "descartes"} · ` : ""}
                       {s.total - s.reativados} a reativar

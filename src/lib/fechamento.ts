@@ -41,7 +41,7 @@ const AO_VIVO: Record<AoVivoField, string[]> = {
   franquia: ["taxa de franquia", "franquia", "taxa da franquia"],
 };
 
-type FaltField = "nome" | "cidade" | "uf" | "sdr" | "mes" | "reativado" | "reserva" | "franquia";
+type FaltField = "nome" | "cidade" | "uf" | "sdr" | "mes" | "reativado" | "negociacao" | "reserva" | "franquia";
 const FALTANTES: Record<FaltField, string[]> = {
   nome: ["candidato", "nome", "lead"],
   cidade: ["cidade", "municipio"],
@@ -49,6 +49,7 @@ const FALTANTES: Record<FaltField, string[]> = {
   sdr: ["sdr", "responsavel (sdr)", "responsavel"],
   mes: ["mes cof", "mes da cof", "mes"],
   reativado: ["reativado", "reativacao", "reativada"],
+  negociacao: ["abriu negociacao", "negociacao", "em negociacao", "abriu negociacao?"],
   reserva: ["termo de reserva", "taxa de reserva", "reserva"],
   franquia: ["taxa de franquia", "franquia", "taxa da franquia"],
 };
@@ -222,7 +223,9 @@ function parseFaltantes(rows: string[][]): Faltante[] {
       ? "franquia"
       : isDone(get(r, "reserva"))
         ? "reserva"
-        : isDiscard(reativado)
+        : isDone(get(r, "negociacao"))
+          ? "negociacao"
+          : isDiscard(reativado)
           ? "descartado"
           : isDone(reativado)
             ? "reativado"

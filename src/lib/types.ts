@@ -99,7 +99,7 @@ export type Faltante = {
   uf: string;
   sdr: string;
   mes: string; // mês da COF ("Novembro", "Sem data")
-  etapa: "franquia" | "reserva" | "reativado" | "descartado" | "contato" | "pendente"; // descartado conta como trabalhado (reativado)
+  etapa: "franquia" | "reserva" | "negociacao" | "reativado" | "descartado" | "contato" | "pendente"; // descartado conta como trabalhado (reativado)
   nota: string; // texto da coluna Reativado quando não é um "sim" (ex.: "tentando")
 };
 
