@@ -51,6 +51,8 @@ export const TIMEZONE = "America/Sao_Paulo";
 // ---- Alarme de inatividade ----
 // Minutos sem presença confirmada NOVA (ou convite novo) até o alerta vermelho aparecer.
 export const ALERT_PRESENCA_MIN = Number(process.env.NEXT_PUBLIC_ALERTA_PRESENCA_MIN ?? 5) || 5;
+// Meta de vendas do fechamento (reta final): 4 vendidos em 27/11 + 3
+export const META_FECHAMENTO = Number(process.env.NEXT_PUBLIC_META_FECHAMENTO ?? 7) || 7;
 // Meta de negociações abertas entre os faltantes reativados
 export const META_NEGOCIACAO = Number(process.env.NEXT_PUBLIC_META_NEGOCIACAO ?? 10) || 10;
 export const ALERT_REATIVACAO_MIN = Number(process.env.NEXT_PUBLIC_ALERTA_REATIVACAO_MIN ?? 5) || 5;

@@ -14,7 +14,7 @@ import { TelaoCard } from "./Telao";
 // Fechamento pós-Black (aba "Ao Vivo") + Reativação (aba "Faltantes"), numa
 // tela só, no tema da Black: faixa zebrada, Anton, amarelo e preto.
 
-const TEMP = {
+export const TEMP = {
   vendido: { label: "Vendidos", one: "Vendido", color: "#f8be19", Icon: Trophy },
   quente: { label: "Quentes", one: "Quente", color: "#ff5a1f", Icon: Flame },
   morno: { label: "Mornos", one: "Morno", color: "#f6a77a", Icon: Thermometer },
@@ -38,21 +38,21 @@ const NEGOCIACAO = "#b794ff";
 const MES_RANK = ["Dezembro", "Novembro", "Outubro", "Setembro", "Agosto", "Julho", "Junho", "Maio", "Abril", "Março", "Fevereiro", "Janeiro"];
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
-const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
-const initials = (nome: string) =>
+export const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+export const initials = (nome: string) =>
   nome
     .split(" ")
     .map((p) => p.charAt(0))
     .slice(0, 2)
     .join("")
     .toUpperCase();
-const place = (l: { cidade: string; uf: string }) => [l.cidade, l.uf].filter(Boolean).join(" · ");
+export const place = (l: { cidade: string; uf: string }) => [l.cidade, l.uf].filter(Boolean).join(" · ");
 
 // ---------------- dados ----------------
 
-type Alert = { kind: "vendido" | "reserva" | "franquia" | "negociacao" | "meta-negociacao" | "reativado"; nome: string; quem: string };
+export type Alert = { kind: "vendido" | "reserva" | "franquia" | "negociacao" | "meta-negociacao" | "reativado"; nome: string; quem: string };
 
-function useFechamento(onAlerts: (a: Alert[]) => void) {
+export function useFechamento(onAlerts: (a: Alert[]) => void) {
   const [data, setData] = useState<FechamentoPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const known = useRef<{ vendidos: Set<string>; etapas: Map<string, number> } | null>(null);
@@ -134,7 +134,7 @@ function useFechamento(onAlerts: (a: Alert[]) => void) {
   return { data, error };
 }
 
-function useStats(data: FechamentoPayload | null) {
+export function useStats(data: FechamentoPayload | null) {
   return useMemo(() => {
     if (!data) return null;
     const by = Object.fromEntries(ORDER.map((t) => [t, [] as FechamentoLead[]])) as Record<Temperatura, FechamentoLead[]>;
@@ -174,7 +174,7 @@ function useStats(data: FechamentoPayload | null) {
 // ---------------- peças ----------------
 
 /** Lista que, quando não cabe, circula sozinha de baixo para cima. */
-function AutoScroll({ items, render, staged, secsPerItem = 2.6 }: { items: unknown[]; render: (copy: boolean) => ReactNode; staged: boolean; secsPerItem?: number }) {
+export function AutoScroll({ items, render, staged, secsPerItem = 2.6 }: { items: unknown[]; render: (copy: boolean) => ReactNode; staged: boolean; secsPerItem?: number }) {
   const viewport = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
@@ -212,7 +212,7 @@ function AutoScroll({ items, render, staged, secsPerItem = 2.6 }: { items: unkno
 
 /** Uma linha só, de altura fixa: quando os cards não cabem, a faixa circula
  *  de lado (como a faixa do topo) em vez de empurrar o resto da tela. */
-function Belt({ count, minW, staged, render }: { count: number; minW: number; staged: boolean; render: (copy: boolean) => ReactNode }) {
+export function Belt({ count, minW, staged, render }: { count: number; minW: number; staged: boolean; render: (copy: boolean) => ReactNode }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -263,7 +263,7 @@ function SectionTitle({ t, n, children }: { t: Temperatura; n: number; children?
   );
 }
 
-function Chip({ color, solid, children }: { color: string; solid?: boolean; children: ReactNode }) {
+export function Chip({ color, solid, children }: { color: string; solid?: boolean; children: ReactNode }) {
   return (
     <span
       className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[13px] font-semibold leading-5 whitespace-nowrap"
@@ -275,7 +275,7 @@ function Chip({ color, solid, children }: { color: string; solid?: boolean; chil
 }
 
 /** "Pago" -> "Reserva paga"; "Amanhã" -> "Reserva: amanhã". */
-function payNote(l: FechamentoLead): string[] {
+export function payNote(l: FechamentoLead): string[] {
   const out: string[] = [];
   if (l.franquiaPaga) out.push("Franquia paga");
   else if (l.franquia) out.push(`Franquia: ${l.franquia.toLowerCase()}`);
@@ -459,7 +459,7 @@ function NegotiationGoal({ n, meta, reativados }: { n: number; meta: number; rea
   );
 }
 
-function Announcement({ alert, onDone }: { alert: Alert; onDone: () => void }) {
+export function Announcement({ alert, onDone }: { alert: Alert; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, alert.kind === "reativado" || alert.kind === "negociacao" ? 5500 : 8000);
     return () => clearTimeout(t);
@@ -485,7 +485,7 @@ function Announcement({ alert, onDone }: { alert: Alert; onDone: () => void }) {
   );
 }
 
-function LiveNote({ now, fetchedAt, error }: { now: number; fetchedAt: number | null; error: string | null }) {
+export function LiveNote({ now, fetchedAt, error }: { now: number; fetchedAt: number | null; error: string | null }) {
   const secs = now && fetchedAt ? Math.max(0, Math.round((now - fetchedAt) / 1000)) : null;
   if (error)
     return (

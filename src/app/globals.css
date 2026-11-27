@@ -421,3 +421,65 @@ html.champion .panel {
   .giroflex-beams { animation: none; }
   .giroflex-tint, .giroflex-dome { animation: none; }
 }
+
+/* ---------- reta final: quanto mais quente, mais a tela chama ---------- */
+/* quente: telefone tocando sem parar, ondas, brilho e botão pulsando */
+@keyframes ring-shake {
+  0%, 46%, 100% { transform: rotate(0); }
+  4%, 12%, 20%, 28%, 36% { transform: rotate(-18deg); }
+  8%, 16%, 24%, 32%, 40% { transform: rotate(18deg); }
+}
+.ring-shake { animation: ring-shake 1.3s ease-in-out infinite; transform-origin: 50% 60%; }
+@keyframes ring-wave {
+  0% { transform: scale(0.75); opacity: 0.85; }
+  100% { transform: scale(1.75); opacity: 0; }
+}
+.ring-wave { animation: ring-wave 1.35s ease-out infinite; }
+@keyframes hot-core { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.hot-core { animation: hot-core 1.3s ease-in-out infinite; box-shadow: 0 0 40px rgb(255 90 31 / 0.6); }
+@keyframes hot-glow {
+  0%, 100% { box-shadow: 0 0 22px rgb(255 90 31 / 0.25), inset 0 0 0 rgb(255 90 31 / 0); }
+  50% { box-shadow: 0 0 60px rgb(255 90 31 / 0.55), inset 0 0 40px rgb(255 90 31 / 0.12); }
+}
+.hot-card { animation: hot-glow 1.3s ease-in-out infinite; }
+@keyframes cta-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+.cta-pulse { animation: cta-pulse 0.9s ease-in-out infinite; transform-origin: left center; }
+@keyframes flame-flicker {
+  0%, 100% { transform: scale(1) rotate(-4deg); }
+  25% { transform: scale(1.12) rotate(3deg); }
+  50% { transform: scale(0.94) rotate(-2deg); }
+  75% { transform: scale(1.08) rotate(5deg); }
+}
+.flame-flicker { animation: flame-flicker 0.7s ease-in-out infinite; }
+
+/* morno: o telefone pula de vez em quando */
+@keyframes phone-hop {
+  0%, 55%, 100% { transform: translateY(0) rotate(0); }
+  63% { transform: translateY(-18px) rotate(-10deg); }
+  71% { transform: translateY(0) rotate(6deg); }
+  78% { transform: translateY(-8px) rotate(-4deg); }
+  85% { transform: translateY(0) rotate(0); }
+}
+.phone-hop { animation: phone-hop 2.4s ease-in-out infinite; }
+@keyframes warm-glow { 0%, 100% { box-shadow: 0 0 0 rgb(246 167 122 / 0); } 50% { box-shadow: 0 0 26px rgb(246 167 122 / 0.22); } }
+.warm-card { animation: warm-glow 2.4s ease-in-out infinite; }
+
+/* frio: só balança devagar */
+@keyframes phone-sway { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+.phone-sway { animation: phone-sway 4.2s ease-in-out infinite; }
+@keyframes snow-spin { to { transform: rotate(360deg); } }
+.snow-spin { animation: snow-spin 9s linear infinite; }
+
+/* meta */
+@keyframes goal-beat { 0%, 100% { transform: rotate(-2deg) scale(1); } 12% { transform: rotate(-2deg) scale(1.08); } 24% { transform: rotate(-2deg) scale(1); } 36% { transform: rotate(-2deg) scale(1.05); } }
+.goal-beat { animation: goal-beat 1.6s ease-in-out infinite; }
+@keyframes slot-next { 0%, 100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.08); opacity: 1; } }
+.slot-next { animation: slot-next 1.2s ease-in-out infinite; }
+@keyframes slot-pop { 0% { transform: scale(0.2) rotate(-40deg); } 60% { transform: scale(1.25) rotate(8deg); } 100% { transform: scale(1) rotate(0); } }
+.slot-pop { animation: slot-pop 0.9s cubic-bezier(.2,1.4,.4,1) both, slot-next 0.6s ease-in-out 0.9s 6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-shake, .ring-wave, .hot-core, .hot-card, .cta-pulse, .flame-flicker, .phone-hop, .warm-card,
+  .phone-sway, .snow-spin, .goal-beat, .slot-next, .slot-pop { animation: none; }
+  .ring-wave { opacity: 0; }
+}
